@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+python-dotenv==1.0.1
+supabase==2.11.0
+httpx==0.28.1
+
+# shared with the existing extraction / deck pipelines
+openpyxl==3.1.5
+pandas==2.2.3
+PyMuPDF==1.25.1
+python-pptx==1.0.2
+Pillow==11.1.0
+requests==2.32.3
