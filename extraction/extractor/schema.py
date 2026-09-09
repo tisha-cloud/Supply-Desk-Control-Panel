@@ -24,29 +24,38 @@ MASTER_COLUMNS = [
 
 # Ordered most-specific-first: the first pattern that hits wins.
 MICROMARKET_RULES = [
-    ("Airport / Devanahalli", r"devanahalli|kiadb\s*aerospace|airport\s*(city|road)|bengaluru\s*international\s*airport|\bkial\b"),
-    ("North-BLR", r"hebbal|manyata|nagavara|yelahanka|jakkur|thanisandra|sahakar\s*nagar|sahakarnagar|bellary\s*road|\brt\s*nagar\b|mekhri|hennur|byatarayanapura|kempapura|\bnorth\b\s*(blr|bangalore|bengaluru|zone)"),
-    ("E-City", r"e[\s\-]*city|electronic[\s\-]*city|electronics\s*city|bommasandra|konappana|hosur\s*road|neotown"),
+    ("Airport / Devanahalli", r"devanahalli|kiadb\s*aerospace|airport\s*(city|road)|airport\s*business\s*district|bengaluru\s*international\s*airport|\bkial\b"),
+    ("North-BLR", r"hebbal|manyata|nagavara|nagawara|yelahanka|jakkur|thanisandra|sahakar\s*nagar|sahakarnagar|bellary\s*road|\brt\s*nagar\b|mekhri|hennur|byatarayanapura|kempapura|kirloskar|\bnorth\b\s*(blr|bangalore|bengaluru|zone)"),
+    # ORR is tested before Whitefield: an ORR address that merely mentions
+    # Whitefield ("Bellandur Whitefield Road") belongs to ORR, not Whitefield.
+    ("ORR", r"outer\s*ring\s*road|\borr\b|bellandur|marathahalli|kadubeesanahalli|devarabeesanahalli|mahadev[ae]?pura|panathur|yemalur|yamalur|kadubisanahalli|ecoworld|eco\s*world|ecospace|embassy\s*tech\s*village|doddanekkundi|\bcv\s*raman\s*nagar\b|\bbanaswadi\b"),
     ("Whitefield", r"whitefield|\bepip\b|\bitpl\b|\bitpb\b|hoodi|brooke?field|kundalahalli|varthur|gunjur|nallurhalli|pattandur|siddapura|channasandra|seetharampalya|graphite\s*india"),
-    ("Sarjapur Road", r"sarjapur\s*(main\s*)?road|haralur|kasavanahalli|ambalipura|dommasandra|carmelaram"),
+    ("Sarjapur Road", r"sarjapura?\s*(main\s*)?road|haralur|kasavanahalli|ambalipura|dommasandra|carmelaram"),
     ("HSR Layout", r"\bhsr\b"),
-    ("ORR", r"outer\s*ring\s*road|\borr\b|bellandur|marathahalli|kadubeesanahalli|devarabeesanahalli|mahadev[ae]?pura|panathur|yemalur|yamalur|kadubisanahalli|ecoworld|eco\s*world|embassy\s*tech\s*village|doddanekkundi|\bcv\s*raman\s*nagar\b|\bbanaswadi\b"),
-    # Domlur/EGL sits on the IRR but trades as Indiranagar stock, so it is matched first.
-    ("Indiranagar", r"indira\s*nagar|indiranagar|domlur|embassy\s*golf|\begl\b|old\s*airport\s*road|murugesh\s*palya|murugeshpalya|\bhal\b|kodihalli"),
+    # Domlur/EGL sits on the IRR but trades as Indiranagar stock, so it matches first.
+    ("Indiranagar", r"indira\s*nagar|indiranagar|indranagar|domlur|embassy\s*golf|\begl\b|old\s*airport\s*road|murugesh\s*palya|murugeshpalya|\bhal\b|kodihalli"),
+    # Koramangala precedes E-City because Hosur Road runs out of Koramangala,
+    # so "Hosur Road Koramangala" must not be filed under E-City.
     ("Koramangala", r"koramangala|intermediate\s*ring\s*road|\birr\b|adugodi|jakkasandra|ejipura"),
+    ("E-City", r"e[\s\-]*city|electronic[\s\-]*city|electronics\s*city|bommasandra|konappana|hosur\s*road|neotown"),
     ("Old Madras Road", r"old\s*madras\s*road|\bomr\b|\bkr\s*puram\b|krishnarajapuram|budigere|hoskote|medahalli"),
-    ("Bannerghatta Road", r"bannerghatta|\bbg\s*road\b|arekere|hulimavu|\bjayadeva\b"),
-    ("South-BLR", r"jp\s*nagar|jayanagar|kanakapura|\bbtm\b|banashankari|\bjp\-nagar\b|bilekahalli|\bbasavanagudi\b"),
-    ("West-BLR", r"yeshwanthpur|yeshwantpur|rajajinagar|malleshwaram|peenya|magadi\s*road|mysore\s*road|nagarbhavi|tumkur\s*road|vijayanagar|jalahalli|dasarahalli"),
-    ("CBD", r"\bcbd\b|\bcdb\b|chickpet|chickpete|avenue\s*road|\bmg\s*road\b|vittal\s*mallya|lavelle|richmond|st\.?\s*mark|residency\s*road|cunningham|infantry|museum\s*road|kasturba|kastruba|ulsoor|race\s*course|millers|palace\s*road|queens\s*road|church\s*street|brigade\s*road|shanti\s*nagar|\bkh\s*road\b|langford|cubbon|central\s*business"),
+    ("Bannerghatta Road", r"bannergh?at+a|\bbg\s*road\b|arekere|hulimavu|\bjayadeva\b"),
+    ("South-BLR", r"jp\s*nagar|jayanagar|kanak[ap]+ura|\bbtm\b|banashankari|\bjp\-nagar\b|bilekahalli|\bbasavanagudi\b|bommanahalli|kudlu|begur"),
+    ("West-BLR", r"yeshwanthpur|yeshwantpur|rajajinagar|malleshwaram|mahalakshmipuram|peenya|magadi\s*road|mysore\s*road|nagarbhavi|tumkur\s*road|vijayanagar|jalahalli|dasarahalli|goraguntepalya"),
+    ("CBD", r"\bcbd\b|\bcdb\b|chickpet|chickpete|avenue\s*road|\bjc\s*road\b|\bmg\s*road\b|vittal\s*mallya|lavelle|richmond|st\.?\s*mark|residency\s*road|cunningham|infantry|museum\s*road|kasturba|kastruba|ulsoor|race\s*course|millers|palace\s*road|queens\s*road|church\s*street|brigade\s*road|shanti\s*nagar|\bkh\s*road\b|langford|cubbon|seshadripuram|sirsi\s*circle|vasanth\s*nagar|central\s*business"),
 ]
 
 NON_BLR_CITIES = r"mysuru|mysore\s+city|pune|hinjewadi|mumbai|navi\s*mumbai|noida|gurgaon|gurugram|delhi|chennai|hyderabad|kolkata|ahmedabad|coimbatore|kochi|cochin|nagpur|jaipur|thane"
 
 CONDITION_RULES = [
     ("Bare Shell", r"bare\s*shell|core\s*(&|and)\s*shell|shell\s*(&|and)\s*core|cold\s*shell"),
-    ("Warm Shell", r"warm\s*shell|wram\s*shell|semi\s*fitted"),
-    ("Pre - Furnished", r"pre[\s\-]*furnish|previously\s*furnish|ready\s*fit\s*out|existing\s*fit\s*out|as[\s\-]*is\s*furnish"),
+    ("Warm Shell", r"warm\s*shell|warmshell|wram\s*shell|semi\s*fitted"),
+    # Semi-furnished is tested before Fully Furnished. The bare `furnished`
+    # alternative in that rule used to swallow it, which marketed a
+    # semi-furnished floor to a client as fully furnished.
+    ("Semi-Furnished", r"semi[\s\-]*furnish|partially\s*furnish"),
+    ("As is Where is", r"as[\s\-]*is[\s\-]*where[\s\-]*is"),
+    ("Pre - Furnished", r"pre[\s\-]*furnish|previously\s*furnish|ready\s*fit\s*out|existing\s*fit\s*out|fitted\s*out|as[\s\-]*is\s*furnish"),
     ("Fully Furnished", r"fully\s*furnish|plug\s*(and|&|n)\s*play|furnished|turn[\s\-]*key|ready\s*to\s*move"),
     ("Managed Office", r"managed\s*(office|space|workspace)|serviced\s*office|co[\s\-]*working|flex\s*space"),
     ("BTS", r"\bbts\b|built[\s\-]*to[\s\-]*suit"),
@@ -120,7 +129,14 @@ def sft(value):
 
 
 def to_number(value):
-    """Parse '1,26,408 Sqft', '1.1 Mn', '4.5 lakh', 45000.0 -> float."""
+    """
+    Parse an area/quantity out of free text.
+
+    Landlord sheets write quantities inside prose ("Block 2, 45000 sqft") and
+    as ranges ("7,020 sft to 4,67,470 sft"). Taking the first number found
+    turned the first of those into 2.0 and wrote it to spaces.area_sqft, so the
+    largest number wins instead, and a range resolves to its upper bound.
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -128,15 +144,24 @@ def to_number(value):
     text = str(value).strip().lower().replace(",", "")
     if not text:
         return None
-    match = re.search(r"(\d+(?:\.\d+)?)", text)
-    if not match:
+
+    numbers = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not numbers:
         return None
-    number = float(match.group(1))
-    if re.search(r"\bmn\b|million|\bmillion\b", text):
+
+    # A power spec reads "1 KVA per 100 sft" - the leading figure is the value,
+    # and the trailing one is the denominator, not a larger quantity.
+    if "kva" in text:
+        return numbers[0]
+
+    number = max(numbers)
+    if re.search(r"\bmn\b|million", text):
         number *= 1_000_000
     elif re.search(r"lakh|lacs?|\blac\b", text):
         number *= 100_000
-    elif re.search(r"\bk\b(?!va)", text) and number < 1000:
+    elif re.search(r"\d\s*k\b", text):
+        # "50K sft" - \bk\b never matched, because a digit-to-k boundary is not
+        # a word boundary.
         number *= 1000
     return number
 
@@ -180,57 +205,94 @@ _MONTH_ABBR = {
 
 
 def normalize_timeline(timeline, occupancy=None):
-    """Master File uses 'Occupied', 'Immediate', or a stated future date."""
+    """
+    Master File uses 'Occupied', 'Immediate', or a stated future date.
+
+    Dates are matched before the ready/immediate words: "Ready by Dec 26" is a
+    handover fifteen months out, and reporting it as Immediate told a client
+    the space was available now.
+    """
     if occupancy == "occupied":
         return "Occupied"
     text = (str(timeline).strip() if timeline else "")
     if not text:
         return "Immediate" if occupancy == "available" else ""
     low = text.lower()
+
     if re.search(r"occupied|leased|let\s*out|not\s*available|taken", low):
         return "Occupied"
-    if re.search(r"immediate|ready|available\s*now|rto|ready\s*to\s*occupy|vacant|hand\s*over\s*done", low):
-        return "Immediate"
-    quarter = re.search(r"\bq([1-4])[\s\-']*(20\d{2}|\d{2})\b", low)
+
+    quarter = re.search(r"\bq([1-4])[\s\-,']*(20\d{2}|\d{2})\b", low)
     if quarter:
         year = quarter.group(2)
-        year = year if len(year) == 4 else "20" + year
-        return "Q%s %s" % (quarter.group(1), year)
-    month = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-']*(20\d{2}|\d{2})\b", low)
+        return "Q%s %s" % (quarter.group(1), year if len(year) == 4 else "20" + year)
+
+    half = re.search(r"\bh([12])[\s\-,']*(20\d{2}|\d{2})\b", low)
+    if half:
+        year = half.group(2)
+        return "H%s %s" % (half.group(1), year if len(year) == 4 else "20" + year)
+
+    month = re.search(
+        r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-,']*(20\d{2}|\d{2})\b", low)
     if month:
         year = month.group(2)
-        year = year if len(year) == 4 else "20" + year
-        return "%s %s" % (_MONTH_ABBR[month.group(1)], year)
+        return "%s %s" % (_MONTH_ABBR[month.group(1)], year if len(year) == 4 else "20" + year)
+
+    if re.search(r"immediate|ready|available|vacant|rto|hand\s*over\s*done", low):
+        return "Immediate"
     return text
 
 
-_ORDINAL = re.compile(r"^\s*(\d+)\s*(st|nd|rd|th)?\s*(floor|flr|f)\s*$", re.I)
+
+
+_WORD_ORDINALS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+    "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
+    "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
+    "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+    "twentieth": 20,
+}
 
 
 def normalize_floor(label):
-    """'Ground Floor' -> 'GF', '5th Floor' -> '5F', 'Level 12' -> '12F'."""
+    """
+    'Ground Floor' -> 'GF', '5th Floor' -> '5F', 'Fifth' -> '5F'.
+
+    One floor must produce one label. The output previously held 5F, 5th,
+    Fifth and 'Fifth Floor' as four separate values for the same floor, which
+    breaks every per-floor rollup and dedup.
+    """
     if label is None:
         return ""
     text = str(label).strip()
     if not text:
         return ""
     low = text.lower()
+
     if re.fullmatch(r"(g|gf|ground(\s*floor)?)", low):
         return "GF"
     if re.fullmatch(r"(ug|upper\s*ground(\s*floor)?)", low):
         return "UGF"
+    if re.fullmatch(r"(lg|lower\s*ground(\s*floor)?)", low):
+        return "LGF"
     if re.fullmatch(r"(mezz(anine)?(\s*floor)?)", low):
         return "Mezzanine"
+
     basement = re.fullmatch(r"(b|basement)\s*[-]?\s*(\d+)?", low)
     if basement:
         return "B" + (basement.group(2) or "1")
-    match = _ORDINAL.fullmatch(text) or re.fullmatch(r"\s*(?:level|lvl|floor)\s*(\d+)\s*", text, re.I)
-    if match:
-        return match.group(1) + "F"
-    if re.fullmatch(r"\d+\s*f", low.replace(" ", "")):
-        return low.replace(" ", "").upper()
-    if re.fullmatch(r"\d+", low):
-        return low + "F"
+
+    # "5", "5F", "5th", "5th Floor", "Level 12" - the floor word is optional.
+    numeric = re.fullmatch(
+        r"(?:level|lvl|floor)?\s*(\d+)\s*(?:st|nd|rd|th)?\s*(?:floor|flr|f)?\s*", low)
+    if numeric:
+        return numeric.group(1) + "F"
+
+    # "Fifth", "Fifth Floor"
+    word = re.fullmatch(r"([a-z]+)\s*(?:floor|flr)?\s*", low)
+    if word and word.group(1) in _WORD_ORDINALS:
+        return "%dF" % _WORD_ORDINALS[word.group(1)]
+
     return text
 
 

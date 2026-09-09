@@ -22,6 +22,13 @@ MIN_BALANCE_SQFT = 1000
 MIN_BALANCE_FRACTION = 0.01
 FULL_STACK_GAP_FRACTION = 0.05
 
+# Backstop only. A high balance is normal - a park with one suite on the
+# market really is ~90% let - so this sits well above that, to catch the case
+# where essentially nothing was listed yet an occupancy is still asserted.
+# The real defence against a campus-level total is implausible_total(), which
+# now refuses to pass an unreadable structure.
+MAX_BALANCE_FRACTION = 0.97
+
 # Sanity envelope for a Bengaluru office floor plate. A stated "total building
 # size" that implies a plate outside this range is almost always a figure the
 # model picked up from a neighbouring project on the same slide.
@@ -30,17 +37,37 @@ MIN_PLAUSIBLE_PLATE = 500
 
 
 def floors_from_structure(structure):
-    """'2B + G + 9' -> 10 usable levels (9 upper + ground). None if unreadable."""
+    """
+    '2B + G + 9' -> 10 usable levels (9 upper + ground). None if unreadable.
+
+    Annotations have to come off first. '3B(Parking) + G(Parking) + 13 Floors'
+    used to count 16 levels, because the annotated basement no longer matched
+    the basement branch and fell through to the generic digit grab - which then
+    shrank the implied floor plate and let an implausible total past the guard.
+    """
     if not structure:
         return None
     text = str(structure).upper()
+
+    # "(2 Towers)" multiplies the stack; capture it before stripping brackets.
+    towers = 1
+    tower_match = re.search(r"(\d+)\s*TOWERS?", text)
+    if tower_match:
+        towers = max(1, int(tower_match.group(1)))
+    elif re.search(r"TOWER\s+[A-Z]\s*(&|AND|\+)\s*[A-Z]", text):
+        towers = 2
+
+    text = re.sub(r"\([^)]*\)", " ", text)          # drop "(Parking)", "(Lobby)"
+    text = re.sub(r"^\s*TOWERS?\s+[A-Z](\s*(&|AND|\+)\s*[A-Z])*\s*[-:]", " ", text)
+    text = re.sub(r"\b(FLOORS?|LEVELS?|OFFICE|TOWERS?)\b", " ", text)
+
     upper = 0
     matched = False
     for part in re.split(r"\+", text):
         part = part.strip()
         if not part:
             continue
-        if re.fullmatch(r"\d*\s*B(ASEMENT)?", part):  # basements are not leasable stack
+        if re.fullmatch(r"\d*\s*B(ASEMENTS?)?", part):   # basements are not leasable
             matched = True
             continue
         if re.fullmatch(r"G(F|ROUND)?", part):
@@ -51,14 +78,24 @@ def floors_from_structure(structure):
         if number:
             upper += int(number.group(0))
             matched = True
-    return upper if (matched and upper) else None
+    return upper * towers if (matched and upper) else None
 
 
 def implausible_total(total, structure):
-    """Returns a reason string when a stated total cannot belong to this building."""
-    floors = floors_from_structure(structure)
-    if not total or not floors:
+    """
+    Returns a reason string when a stated total cannot belong to this building.
+
+    An unparseable structure is not a free pass. It used to return "" - no
+    guard at all - which is how a campus-level total for RMZ Ecoworld Campus 20
+    produced a derived "Occupied" row covering 98.5% of the building.
+    """
+    if not total:
         return ""
+    floors = floors_from_structure(structure)
+    if not floors:
+        return ("building structure %r could not be read, so the stated total %s "
+                "cannot be sanity-checked against a floor plate"
+                % (str(structure or "")[:40], schema.sft(total)))
     plate = total / float(floors)
     if plate > MAX_PLAUSIBLE_PLATE:
         return ("stated total %s over %d levels implies a %s floor plate - likely "
@@ -105,7 +142,13 @@ def build_building_rows(building, developer, source_meta):
     asset_type = (building.get("asset_type") or "office").lower()
     txn_type = (building.get("transaction_type") or "lease").lower()
 
-    micromarket = schema.normalize_micromarket(locality, name, source_meta.get("folder", ""))
+    # The folder names the landlord, not the asset. Blending it with the
+    # address forced every building under "Park Square whitefield/" into
+    # Whitefield, so it is only consulted when the address yields nothing.
+    micromarket = schema.normalize_micromarket(locality, name)
+    if micromarket in ("", "Others"):
+        micromarket = schema.normalize_micromarket(
+            locality, name, source_meta.get("folder", "")) or micromarket
     if not schema.is_bangalore(city, locality, name):
         micromarket = "Outside BLR"
 
@@ -228,6 +271,13 @@ def build_building_rows(building, developer, source_meta):
     threshold = max(MIN_BALANCE_SQFT, total * MIN_BALANCE_FRACTION)
     if disclosure == "full_stack":
         threshold = max(threshold, total * FULL_STACK_GAP_FRACTION)
+
+    if balance >= total * MAX_BALANCE_FRACTION:
+        diagnostics["issue"] = (
+            "derived balance %s is %.0f%% of the stated total - the total most "
+            "likely covers more than the listed floors; no balance row emitted"
+            % (schema.sft(balance), 100 * balance / total))
+        return rows, diagnostics
 
     if balance >= threshold:
         basis = "estimated total" if estimated else "stated total"
