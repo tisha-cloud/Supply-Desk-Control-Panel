@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Users,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { backend } from "@/lib/backend";
@@ -288,6 +289,10 @@ export default function DataPage() {
         description="Every building the three tools share — conventional, managed and co-working in one place."
         actions={
           <>
+            <Link href="/data/organisations" className="btn-secondary">
+              <Users className="h-4 w-4" aria-hidden />
+              Duplicate landlords
+            </Link>
             <button className="btn-secondary" onClick={() => setShowImport((v) => !v)}>
               <FileSpreadsheet className="h-4 w-4" aria-hidden />
               Import workbook

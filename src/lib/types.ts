@@ -163,3 +163,22 @@ export interface DeckPreviewBuilding {
   rent_psf: number | null;
   supply_type: SupplyType;
 }
+
+/** A proposed organisation merge, as returned by the backend. */
+export interface DuplicateOrganisation {
+  id: string;
+  name: string;
+  role: string;
+  buildings: number;
+  risk?: string | null;
+}
+
+export interface DuplicateGroup {
+  keep: DuplicateOrganisation;
+  merge: DuplicateOrganisation[];
+  /** True only when every difference is casing, punctuation or a legal suffix. */
+  confident: boolean;
+  risks: string[];
+  /** How many building references the merge would move. */
+  moves: number;
+}

@@ -231,6 +231,32 @@ def list_jobs(kind: Optional[str] = None, limit: int = 20):
     return query.execute().data or []
 
 
+# ============================================================ de-duplication
+class MergeRequest(BaseModel):
+    keep_id: str
+    merge_ids: List[str]
+
+
+@app.get("/api/dedup/organisations")
+def list_duplicate_organisations():
+    """Proposed merges. Nothing is applied until a human confirms one."""
+    if not config.supabase_configured():
+        raise HTTPException(503, "Supabase is not configured.")
+    from services import dedup
+    return dedup.duplicate_report()
+
+
+@app.post("/api/dedup/organisations/merge")
+def merge_duplicate_organisations(request: MergeRequest):
+    if not config.supabase_configured():
+        raise HTTPException(503, "Supabase is not configured.")
+    from services import dedup
+    try:
+        return dedup.merge_organisations(request.keep_id, request.merge_ids)
+    except Exception as exc:
+        raise HTTPException(500, "Merge failed: %s" % exc)
+
+
 # ====================================================================== decks
 class DeckRequest(BaseModel):
     query: str

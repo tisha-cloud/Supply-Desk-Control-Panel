@@ -6,7 +6,7 @@
  * straight to :8000, so the backend URL stays server-side and there is no CORS
  * negotiation in the browser.
  */
-import type { DeckPreviewBuilding, IngestJob } from "./types";
+import type { DeckPreviewBuilding, DuplicateGroup, IngestJob } from "./types";
 
 export const BACKEND_URL =
   process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000";
@@ -81,6 +81,15 @@ export const backend = {
     request<IngestJob[]>(`/api/jobs${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`),
 
   templates: () => request<string[]>("/api/templates"),
+
+  duplicateOrganisations: () =>
+    request<DuplicateGroup[]>("/api/dedup/organisations"),
+
+  mergeOrganisations: (body: { keep_id: string; merge_ids: string[] }) =>
+    request<{ buildings: number; spaces: number; contacts: number; removed: number }>(
+      "/api/dedup/organisations/merge",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   previewDeck: (body: { query: string }) =>
     request<{
