@@ -1,4 +1,5 @@
 import os
+import re
 import copy
 from datetime import datetime
 import pptx
@@ -30,6 +31,66 @@ def format_currency(val, prefix="INR ", suffix=" / Sq. Ft. / Month"):
         return f"{prefix}{num:,.0f}{suffix}"
     except (ValueError, TypeError):
         return s
+
+
+def format_months(val, default=""):
+    """
+    '36.0' -> '36 Months'.
+
+    The caller used to loop over a list of locals reassigning the loop
+    variable, which does nothing, so these rendered as bare floats: a client
+    saw "Lease Term: 36.0".
+    """
+    s = safe_str(val, default)
+    if not s:
+        return default
+    try:
+        number = float(str(s).replace(",", ""))
+    except (ValueError, TypeError):
+        return s
+    if number <= 0:
+        return default
+    whole = int(number)
+    return "%d Month%s" % (whole, "" if whole == 1 else "s")
+
+
+def format_percent(val, default=""):
+    """
+    Escalation arrives from Excel as a fraction: 0.08 is 8%, and rendered raw
+    it read as "Rental Escalation: 0.08".
+    """
+    s = safe_str(val, default)
+    if not s:
+        return default
+    if "%" in s:
+        return s
+    try:
+        number = float(str(s).replace(",", ""))
+    except (ValueError, TypeError):
+        return s
+    if number <= 1:                     # a fraction, not a percentage
+        number *= 100
+    text = ("%g" % round(number, 2))
+    return text + "%"
+
+
+def format_quantity(area, seats=None):
+    """
+    Managed office is sold by the seat. Rendering only the area gave
+    "Area Offered: 0 Sq. Ft." on an option that had 105 seats available.
+    """
+    area_text = format_area(area) if safe_str(area) else ""
+    if area_text and area_text != "Available on Request" and not area_text.startswith("0 "):
+        return area_text
+    seat_text = safe_str(seats)
+    if seat_text:
+        try:
+            count = int(float(seat_text.replace(",", "")))
+            if count > 0:
+                return "%s Seats" % "{:,}".format(count)
+        except (ValueError, TypeError):
+            pass
+    return "Available on Request"
 
 
 def format_area(val):
@@ -151,16 +212,11 @@ class PPTGenerator:
                         except (ValueError, TypeError):
                             pass
                     
-                    esc = safe_str(rec.get('rental_escalation'), '15% Every 36 Months')
-                    sec_dep = safe_str(rec.get('security_deposit_months'), '6 Months')
-                    lease_term = safe_str(rec.get('lease_tenure_months'), '60 Months')
-                    lock_in = safe_str(rec.get('lock_in_period_months'), '36 Months')
-                    notice = safe_str(rec.get('notice_period_months'), '6 Months')
-                    
-                    # Ensure "Months" suffix
-                    for val_ref in [sec_dep, lease_term, lock_in, notice]:
-                        if val_ref and val_ref.isdigit():
-                            val_ref = f"{val_ref} Months"
+                    esc = format_percent(rec.get('rental_escalation'), '15% Every 36 Months')
+                    sec_dep = format_months(rec.get('security_deposit_months'), '6 Months')
+                    lease_term = format_months(rec.get('lease_tenure_months'), '60 Months')
+                    lock_in = format_months(rec.get('lock_in_period_months'), '36 Months')
+                    notice = format_months(rec.get('notice_period_months'), '6 Months')
 
                     rows_data = [
                         (1, rent, True),
@@ -178,7 +234,8 @@ class PPTGenerator:
 
                 # Table: Details of Space Offered (8 rows x 2 cols)
                 elif 'DETAILS OF THE SPACE' in t_first_cell or 'SPACE OFFERED' in t_first_cell:
-                    area = format_area(rec.get('available_inventory_sqft'))
+                    area = format_quantity(rec.get('available_inventory_sqft'),
+                                          rec.get('offered_seats'))
                     floor = safe_str(rec.get('floor_offered'), 'Multiple Floors')
                     fitout = safe_str(rec.get('fitout_details', rec.get('status')), 'Furnished')
                     power = safe_str(rec.get('power_kva'), '1 KVA / 100 Sq. Ft.')
@@ -224,8 +281,13 @@ class PPTGenerator:
                     if phone:
                         highlights.append(f"• Phone: {phone}")
                     
+                    # The workbook stores a lat/lng pair here. Rendered raw it
+                    # read "Location: 12.981772994423237" in a client proposal,
+                    # which says nothing the address bullet has not already said.
                     loc_map = safe_str(rec.get('location_map'))
-                    if loc_map and 'maps.google' not in loc_map:
+                    is_coordinates = bool(re.fullmatch(
+                        r"\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*", loc_map))
+                    if loc_map and not is_coordinates and 'maps.google' not in loc_map:
                         highlights.append(f"• Location: {loc_map}")
                     
                     for idx, h_text in enumerate(highlights):
