@@ -39,12 +39,24 @@ SUPPLY_DIR = os.path.join(EXTRACTION_DIR, "BLR_Builders_Developers_Supply")
 TEMPLATES_DIR = os.path.join(LLM_DIR, "templates")
 
 # ------------------------------------------------------------------ supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+# Supabase is migrating its key names: legacy projects issue a service_role
+# JWT, newer ones an `sb_secret_...` key. Either grants the server-side access
+# this backend needs (bulk ingest bypasses RLS), so accept both spellings.
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
+SUPABASE_SERVICE_ROLE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_SECRET_KEY")
+    or ""
+).strip()
 
 BUCKET_IMAGES = "building-images"
 BUCKET_DECKS = "decks"
 BUCKET_SOURCES = "source-files"
+
+# Host/port the service binds to. Configurable because a crashed uvicorn can
+# leave port 8000 held by an unkillable process until the machine restarts.
+HOST = os.getenv("BACKEND_HOST", "127.0.0.1").strip()
+PORT = int(os.getenv("BACKEND_PORT", "8000"))
 
 # ---------------------------------------------------------------------- misc
 ALLOWED_ORIGINS = [

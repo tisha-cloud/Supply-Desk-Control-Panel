@@ -16,8 +16,18 @@ create extension if not exists "uuid-ossp";
 create extension if not exists pg_trgm;   -- fuzzy building-name matching on import
 
 -- --------------------------------------------------------------- enumerations
+-- The three supply categories the desk actually trades, plus two catch-alls.
+-- 'managed' and 'coworking' are distinct products from the same operators:
+-- managed office is a private, built-out suite let by the seat or the floor;
+-- coworking is shared/hot-desk inventory.
 do $$ begin
-  create type supply_type as enum ('conventional', 'managed', 'sale', 'other');
+  create type supply_type as enum
+    ('conventional', 'managed', 'coworking', 'sale', 'other');
+exception when duplicate_object then null; end $$;
+
+-- How much of a product an operator actually does, as the workbook records it.
+do $$ begin
+  create type offering_level as enum ('yes', 'limited', 'no');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -54,6 +64,12 @@ create table if not exists organisations (
   name        text not null,
   slug        text not null unique,
   role        org_role not null default 'developer',
+  -- What this operator offers, independent of any one building. A landlord
+  -- can run managed suites in one tower and coworking floors in another.
+  offers_managed   offering_level,
+  offers_coworking offering_level,
+  major_locations  text,
+  is_active        boolean not null default true,
   website     text,
   notes       text,
   created_at  timestamptz not null default now(),
@@ -72,6 +88,10 @@ create table if not exists buildings (
   micro_market_id         uuid references micro_markets(id) on delete set null,
   developer_id            uuid references organisations(id) on delete set null,
   operator_id             uuid references organisations(id) on delete set null,
+  -- The operator's own sub-brand for this building ("BHIVE Platinum",
+  -- "315Work Avenue DLR1"). operator_id points at the canonical company;
+  -- this keeps the product line the source file named.
+  operator_brand          text,
   supply_type             supply_type not null default 'conventional',
   asset_type              asset_type  not null default 'office',
 
