@@ -8,6 +8,7 @@ service, and end users talk to Supabase with their own anon/authenticated key.
 """
 import re
 import threading
+from difflib import SequenceMatcher
 import unicodedata
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -80,22 +81,83 @@ def ensure_organisation(name: str, role: str = "developer") -> Optional[str]:
 
 
 # ------------------------------------------------------------------- buildings
-def find_building(name: str, micro_market_id: Optional[str] = None,
-                  developer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """
-    Match on the building's own name, narrowed by BOTH landlord and micro-market
-    when they are known.
 
-    Narrowing on the landlord alone is not enough: plenty of buildings are filed
-    under a generic developer like "Independent", so "BHIVE Platinum" in
-    Indiranagar would otherwise merge with the unrelated "BHIVE Platinum" in HSR
-    Layout. Two buildings only count as the same asset when the name, the
-    landlord and the micro-market all agree.
+# LIKE treats % and _ as wildcards, so a building named "50% Block" would match
+# far more than itself.
+_LIKE_SPECIALS = {"%": r"\%", "_": r"\_", "\\": r"\\\\"}
+
+# Two names have to be this close before they are treated as one building.
+# The previous rule - a 24-character substring - merged genuinely different
+# blocks of one park: "Bagmane World Technology Centre - Opal"[:24] also
+# matches Aquamarine, Citrine and Peridot.
+NAME_MATCH_THRESHOLD = 0.93
+
+
+def like_escape(text):
+    """Make a string safe to interpolate into an ilike pattern."""
+    return "".join(_LIKE_SPECIALS.get(ch, ch) for ch in str(text or ""))
+
+
+def _name_key(text):
+    return re.sub(r"[^a-z0-9]+", " ", str(text or "").lower()).strip()
+
+
+def _block_identifier(text):
+    """
+    The short trailing token that distinguishes one block from its siblings:
+    "Wing D" -> "d", "WTC Block 5" -> "5". None when the name does not end in one.
+    """
+    key = _name_key(text)
+    match = re.search(r"(?:block|wing|tower|phase|core|unit)\s+([a-z0-9]{1,3})$", key)
+    if match:
+        return match.group(1)
+    match = re.search(r"\s([a-z0-9]{1,2})$", key)
+    return match.group(1) if match else None
+
+
+def same_building_name(left, right, threshold=NAME_MATCH_THRESHOLD):
+    """
+    Whether two building names refer to the same asset.
+
+    Deliberately strict. A false merge silently destroys inventory - the
+    survivor's fields are overwritten and the other block's availability is
+    attached to the wrong building - whereas a false split shows up as a
+    duplicate that a human can merge.
+
+    A differing block identifier is decisive on its own: "Wing D" and "Wing E"
+    are 97% similar as strings but are different buildings, and a ratio alone
+    would merge every wing of a park into the first one seen.
+    """
+    a, b = _name_key(left), _name_key(right)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+
+    block_a, block_b = _block_identifier(left), _block_identifier(right)
+    if block_a and block_b and block_a != block_b:
+        return False
+
+    return SequenceMatcher(None, a, b).ratio() >= threshold
+
+
+def find_building(name, micro_market_id=None, developer_id=None):
+    """
+    Find the building this record describes, or None.
+
+    Identity requires the name, the landlord and the micro-market to agree.
+    Narrowing on the landlord alone is not enough - plenty of buildings are
+    filed under a generic developer like "Independent" - and the old loose
+    fallback ignored the micro-market entirely, which merged seven genuinely
+    different buildings across markets, including three separate
+    "Salarpuria Magnificia" records in Indiranagar, ORR and Whitefield.
     """
     if not name:
         return None
     sb = client()
-    query = sb.table("buildings").select("*").ilike("name", name.strip())
+    name = str(name).strip()
+
+    query = sb.table("buildings").select("*").ilike("name", like_escape(name))
     if developer_id:
         query = query.eq("developer_id", developer_id)
     if micro_market_id:
@@ -104,15 +166,18 @@ def find_building(name: str, micro_market_id: Optional[str] = None,
     if found.data:
         return found.data[0]
 
-    # Fall back to a loose match within the same landlord only - matching across
-    # landlords on name alone merges genuinely different assets.
+    # Near-miss spellings, but only inside the same market: a different
+    # micro-market means a different asset, whatever the name says.
+    if not (developer_id or micro_market_id):
+        return None
+    candidates = sb.table("buildings").select("*")
     if developer_id:
-        loose = (sb.table("buildings").select("*")
-                 .eq("developer_id", developer_id)
-                 .ilike("name", "%%%s%%" % name.strip()[:24])
-                 .limit(1).execute())
-        if loose.data:
-            return loose.data[0]
+        candidates = candidates.eq("developer_id", developer_id)
+    if micro_market_id:
+        candidates = candidates.eq("micro_market_id", micro_market_id)
+    for row in (candidates.limit(200).execute().data or []):
+        if same_building_name(name, row.get("name")):
+            return row
     return None
 
 

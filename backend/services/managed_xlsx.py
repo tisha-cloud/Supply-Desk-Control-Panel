@@ -26,6 +26,7 @@ from xml.etree import ElementTree as ET
 import openpyxl
 
 import db
+from extractor import schema
 
 NS = {
     "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -271,6 +272,52 @@ def _text(value: Any) -> Optional[str]:
     if not text or text.lower() in ("none", "nan", "n/a", "na", "-", "tbd"):
         return None
     return text
+
+
+# The quantity and the rate are written into separate rows and each has its own
+# ambiguous unit, so they are classified independently. Letting one infer the
+# other propagates a single misreading into both fields: a 30,000 sq ft suite
+# quoted at a per-seat rate would become "30,000 seats", and a 63-seat centre
+# quoted per square foot would become "63 sq ft".
+SEAT_RATE_FLOOR = 1000        # a monthly rate at or above this is per seat
+SQFT_RATE_CEILING = 500       # at or below this it is per square foot
+AREA_QUANTITY_FLOOR = 5000    # a quantity above this is an area, not a seat count
+
+
+def classify_offering(offered):
+    """"seats" or "area" - what the offered quantity is counted in."""
+    if not offered or offered <= 0:
+        return None
+    return "area" if offered > AREA_QUANTITY_FLOOR else "seats"
+
+
+def classify_rate(rate):
+    """
+    "seat", "sqft", or None when the magnitude does not settle it.
+
+    This used to depend on whether a seat count was present, so an option with
+    a per-seat rate but no seat count had its rate filed as rent per square
+    foot - which is how thirteen rows ended up quoting a median of Rs 9,500
+    per square foot per month.
+    """
+    if not rate or rate <= 0:
+        return None
+    if rate >= SEAT_RATE_FLOOR:
+        return "seat"
+    if rate <= SQFT_RATE_CEILING:
+        return "sqft"
+    return None
+
+
+def offering_mismatch(offering, rate_unit):
+    """A note when the quantity and the rate disagree, for a human to check."""
+    if not offering or not rate_unit:
+        return None
+    if offering == "area" and rate_unit == "seat":
+        return "quantity reads as an area but the rate reads as per-seat"
+    if offering == "seats" and rate_unit == "sqft":
+        return "quantity reads as seats but the rate reads as per-sq-ft"
+    return None
 
 
 def _latlng(value: Any) -> Tuple[Optional[float], Optional[float]]:
@@ -544,28 +591,30 @@ def _import_sheet(sheet_name: str, rows: List[Tuple], image_entries: List[Dict[s
 
         offered = cell("offered", col)
         offered_num = _num(offered)
-        # The managed sheet quotes seats, not area, unless the label says sq ft.
-        looks_like_area = bool(offered_num and offered_num > 5000)
-        timeline = _text(cell("timeline", col))
+        rent_value = _num(cell("rent", col))
+        offering = classify_offering(offered_num)
+        rate_unit = classify_rate(rent_value)
+        looks_like_area = offering == "area"
+        unit_note = offering_mismatch(offering, rate_unit)
+        # Both ingest paths must write the same vocabulary into these columns;
+        # the extraction side already normalises, so this one does too.
+        timeline = schema.normalize_timeline(
+            _text(cell("timeline", col)), "available") or None
+        condition = schema.normalize_condition(
+            _text(cell("status", col)), _text(cell("fitout", col))) or None
 
         # The managed sheets reuse the "Quoted Rental [INR/Sq.Ft./Month]" row for
-        # per-seat pricing - values like 6,500 or 10,000 are a monthly seat rate,
-        # not a square-foot rate. Filing them as rent_psf would put an absurd
-        # number in front of a client.
-        rent_value = _num(cell("rent", col))
-        seat_priced = (
-            supply_type in ("managed", "coworking")
-            and not looks_like_area
-            and (offered_num or 0) > 0
-            and (rent_value or 0) > 500
-        )
+        # per-seat pricing. Whether a rate is per seat follows from the unit the
+        # offering is counted in, plus its own magnitude - a rate in the
+        # thousands is never a square-foot rate.
+        seat_priced = rate_unit == "seat"
 
         space = {
             "option_label": _text(rows[0][col] if col < len(rows[0]) else None),
             "floor_label": _text(cell("floor_offered", col)),
             "seats": int(offered_num) if offered_num is not None and not looks_like_area else None,
             "area_sqft": offered_num if looks_like_area else None,
-            "condition": _text(cell("status", col)),
+            "condition": condition,
             "condition_detail": _text(cell("fitout", col)),
             "timeline": timeline,
             "occupancy": "occupied" if (timeline or "").lower() == "occupied"
@@ -583,6 +632,7 @@ def _import_sheet(sheet_name: str, rows: List[Tuple], image_entries: List[Dict[s
             "source_file": sheet_name,
             "operator_id": operator_id,
             "operator_brand": operator_brand,
+            "notes": unit_note,
         }
         pending.setdefault(building_id, []).append(space)
         operators_seen.setdefault(building_id, set()).add(operator_id)
