@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commercial Real Estate Data Extraction Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --card-bg: #131b2e;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.35);
+            --secondary: #10b981;
+            --accent: #f59e0b;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-purple: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        header {
+            background: rgba(19, 27, 46, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--card-border);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--accent-purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px var(--primary-glow);
+            font-size: 22px;
+        }
+
+        .brand-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #ffffff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #4f46e5);
+            color: white;
+            box-shadow: 0 4px 14px var(--primary-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px var(--primary-glow);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Container */
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.25rem 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+        }
+
+        .kpi-title {
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .kpi-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .kpi-sub {
+            font-size: 0.78rem;
+            color: var(--secondary);
+            margin-top: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Controls / Tabs */
+        .controls-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+        }
+
+        .tab-btn {
+            padding: 0.6rem 1.25rem;
+            border-radius: 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px var(--primary-glow);
+        }
+
+        /* Filter Panel */
+        .filter-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .filter-group label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .form-control {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 0.55rem 0.85rem;
+            color: white;
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+        }
+
+        /* Data Table */
+        .table-container {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.88rem;
+        }
+
+        thead {
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        th {
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-main);
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.65rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-dev {
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .badge-fitout {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-method {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-audit-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+
+        /* Pagination & Info */
+        .table-footer {
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.15);
+            border-top: 1px solid var(--card-border);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 650px;
+            padding: 2rem;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🏢</div>
+            <div>
+                <div class="brand-title">CRE Central Database Engine</div>
+                <div class="brand-subtitle">Commercial Real Estate Multi-Format Extraction Pipeline</div>
+            </div>
+        </div>
+        <div class="nav-actions">
+            <button class="btn btn-outline" onclick="triggerReextract()" id="btn-reextract">
+                <span id="spinner" style="display:none;">⏳</span>
+                <span>🔄 Re-Extract All Files</span>
+            </button>
+            <button class="btn btn-success" onclick="downloadCSV()">
+                <span>⬇️ Download Central CSV</span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- KPI Dashboard -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-title">Total Properties Extracted</div>
+                <div class="kpi-value" id="kpi-records">-</div>
+                <div class="kpi-sub">Across 35 Developer Groups</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Total Available Area</div>
+                <div class="kpi-value" id="kpi-area">-</div>
+                <div class="kpi-sub">Sq. Ft. Commercial Supply</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Average Rent Rate</div>
+                <div class="kpi-value" id="kpi-rent">-</div>
+                <div class="kpi-sub">INR / Sq. Ft. / Month</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">File Coverage Audit</div>
+                <div class="kpi-value" id="kpi-coverage">100%</div>
+                <div class="kpi-sub" id="kpi-coverage-sub">75/75 Input Files Accounted</div>
+            </div>
+        </div>
+
+        <!-- Controls / Tabs -->
+        <div class="controls-bar">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('database')" id="tab-database">📊 Centralized Database Explorer</button>
+                <button class="tab-btn" onclick="switchTab('audit')" id="tab-audit">📋 100% File Coverage Audit Log</button>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="search-input" class="form-control" placeholder="🔍 Search properties, developers, locations..." style="width: 320px;" onkeyup="applyFilters()">
+            </div>
+        </div>
+
+        <!-- Database View -->
+        <div id="view-database">
+            <!-- Filter Bar -->
+            <div class="filter-panel">
+                <div class="filter-group">
+                    <label>DEVELOPER / GROUP</label>
+                    <select id="filter-dev" class="form-control" onchange="applyFilters()">
+                        <option value="all">All Developers</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>MICROMARKET / LOCATION</label>
+                    <select id="filter-loc" class="form-control" onchange="applyFilters()">
+                        <option value="all">All Micromarkets</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>FITOUT CONDITION</label>
+                    <select id="filter-fitout" class="form-control" onchange="applyFilters()">
+                        <option value="all">All Fitout Types</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>MIN AREA (SQ FT)</label>
+                    <input type="number" id="filter-min-area" class="form-control" placeholder="e.g. 5000" onchange="applyFilters()">
+                </div>
+                <div class="filter-group">
+                    <label>MAX RENT (INR/SQFT)</label>
+                    <input type="number" id="filter-max-rent" class="form-control" placeholder="e.g. 150" onchange="applyFilters()">
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Developer</th>
+                            <th>Property Name</th>
+                            <th>Micromarket</th>
+                            <th>Block / Floor</th>
+                            <th>Available Area</th>
+                            <th>Fitout Status</th>
+                            <th>Rent Rate</th>
+                            <th>Source File & Method</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr><td colspan="9" style="text-align: center; padding: 2rem;">Loading Centralized Database...</td></tr>
+                    </tbody>
+                </table>
+                <div class="table-footer">
+                    <div id="table-info">Showing 0 of 0 property listings</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit View -->
+        <div id="view-audit" style="display: none;">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Developer / Folder</th>
+                            <th>Source File Name</th>
+                            <th>Format</th>
+                            <th>File Size</th>
+                            <th>Records Extracted</th>
+                            <th>Extraction Method</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-table-body">
+                        <tr><td colspan="8" style="text-align: center; padding: 2rem;">Loading File Coverage Audit Log...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <div class="modal-overlay" id="detail-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-title" style="color:white; font-family:'Outfit'; font-size:1.25rem;">Property Detail</h3>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div id="modal-content" style="font-size:0.9rem; line-height:1.6; color:#d1d5db;">
+                <!-- Filled dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'database';
+
+        async function loadData() {
+            const dev = document.getElementById('filter-dev').value;
+            const loc = document.getElementById('filter-loc').value;
+            const fitout = document.getElementById('filter-fitout').value;
+            const minArea = document.getElementById('filter-min-area').value;
+            const maxRent = document.getElementById('filter-max-rent').value;
+            const search = document.getElementById('search-input').value;
+
+            let url = `/api/data?search=${encodeURIComponent(search)}`;
+            if (dev !== 'all') url += `&developer=${encodeURIComponent(dev)}`;
+            if (loc !== 'all') url += `&micromarket=${encodeURIComponent(loc)}`;
+            if (fitout !== 'all') url += `&fitout=${encodeURIComponent(fitout)}`;
+            if (minArea) url += `&min_area=${minArea}`;
+            if (maxRent) url += `&max_rent=${maxRent}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+
+                // Update KPIs
+                document.getElementById('kpi-records').innerText = data.metrics.total_records.toLocaleString();
+                document.getElementById('kpi-area').innerText = data.metrics.total_area_sqft ? data.metrics.total_area_sqft.toLocaleString() : "N/A";
+                document.getElementById('kpi-rent').innerText = data.metrics.avg_rent_sqft ? `₹ ${data.metrics.avg_rent_sqft}` : "N/A";
+
+                // Populate Dropdowns if empty
+                populateDropdown('filter-dev', data.filters.developers, dev);
+                populateDropdown('filter-loc', data.filters.micromarkets, loc);
+                populateDropdown('filter-fitout', data.filters.fitouts, fitout);
+
+                // Render Table
+                const tbody = document.getElementById('table-body');
+                tbody.innerHTML = '';
+
+                if (data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem;">No matching property listings found</td></tr>';
+                } else {
+                    data.data.forEach((row, idx) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><span class="badge badge-dev">${row.developer_name || 'N/A'}</span></td>
+                            <td style="font-weight: 600; color: #ffffff;">${row.property_name || 'N/A'}</td>
+                            <td>📍 ${row.micromarket_location || 'N/A'}</td>
+                            <td>${row.building_block_tower || ''} ${row.floor_details ? '• ' + row.floor_details : ''}</td>
+                            <td style="font-weight:600; color:#10b981;">${row.available_area_sqft ? Number(row.available_area_sqft).toLocaleString() + ' sq ft' : 'N/A'}</td>
+                            <td><span class="badge badge-fitout">${row.fitout_status || 'Unspecified'}</span></td>
+                            <td style="font-weight:600; color:#f59e0b;">${row.rent_rate_sqft_pm ? '₹ ' + row.rent_rate_sqft_pm + '/sqft' : 'N/A'}</td>
+                            <td><span class="badge badge-method">${row.extraction_method || 'Parsed'}</span><br><small style="color:#6b7280">${row.source_file}</small></td>
+                            <td><button class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;" onclick='openModal(${JSON.stringify(row).replace(/'/g, "&apos;")})'>Details</button></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                document.getElementById('table-info').innerText = `Showing ${data.data.length} of ${data.metrics.total_records} property listings`;
+
+            } catch (err) {
+                console.error("Error loading data:", err);
+            }
+        }
+
+        async function loadAuditLog() {
+            try {
+                const res = await fetch('/api/audit');
+                const data = await res.json();
+
+                document.getElementById('kpi-coverage').innerText = `${data.summary.coverage_pct}%`;
+                document.getElementById('kpi-coverage-sub').innerText = `${data.summary.extracted_files}/${data.summary.total_files} Files Accounted`;
+
+                const tbody = document.getElementById('audit-table-body');
+                tbody.innerHTML = '';
+
+                data.audit_records.forEach((row, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td style="font-weight:600;">${row.folder_category}</td>
+                        <td>${row.source_file}</td>
+                        <td><span class="badge badge-dev">${row.source_format}</span></td>
+                        <td>${row.file_size_kb} KB</td>
+                        <td style="font-weight:700; color:#10b981;">${row.records_extracted_count}</td>
+                        <td><span class="badge badge-method">${row.extraction_engines_used}</span></td>
+                        <td><span class="badge badge-audit-success">✓ ${row.status}</span></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error("Error loading audit log:", err);
+            }
+        }
+
+        function populateDropdown(id, options, currentVal) {
+            const el = document.getElementById(id);
+            if (el.children.length > 1) return; // Already populated
+            options.forEach(opt => {
+                const o = document.createElement('option');
+                o.value = opt;
+                o.innerText = opt;
+                if (opt === currentVal) o.selected = true;
+                el.appendChild(o);
+            });
+        }
+
+        function applyFilters() {
+            loadData();
+        }
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            document.getElementById('tab-database').classList.toggle('active', tabName === 'database');
+            document.getElementById('tab-audit').classList.toggle('active', tabName === 'audit');
+
+            document.getElementById('view-database').style.display = tabName === 'database' ? 'block' : 'none';
+            document.getElementById('view-audit').style.display = tabName === 'audit' ? 'block' : 'none';
+
+            if (tabName === 'audit') loadAuditLog();
+        }
+
+        async function triggerReextract() {
+            const btn = document.getElementById('btn-reextract');
+            const spinner = document.getElementById('spinner');
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+
+            try {
+                const res = await fetch('/api/reextract', { method: 'POST' });
+                const data = await res.json();
+                alert("Re-extraction complete!");
+                loadData();
+                loadAuditLog();
+            } catch (err) {
+                alert("Re-extraction failed: " + err);
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        }
+
+        function downloadCSV() {
+            window.location.href = '/api/download/csv';
+        }
+
+        function openModal(row) {
+            document.getElementById('modal-title').innerText = row.property_name || "Property Details";
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <p><strong>Developer:</strong> ${row.developer_name || 'N/A'}</p>
+                <p><strong>Micromarket:</strong> ${row.micromarket_location} (Raw: ${row.raw_location || 'N/A'})</p>
+                <p><strong>Block/Tower/Wing:</strong> ${row.building_block_tower || 'N/A'}</p>
+                <p><strong>Floor:</strong> ${row.floor_details || 'N/A'}</p>
+                <p><strong>Available Area:</strong> ${row.available_area_sqft ? Number(row.available_area_sqft).toLocaleString() + ' sq ft' : 'N/A'}</p>
+                <p><strong>Fitout Status:</strong> ${row.fitout_status} (Raw: ${row.raw_fitout_status || 'N/A'})</p>
+                <p><strong>Rent Rate:</strong> ${row.rent_rate_sqft_pm ? '₹ ' + row.rent_rate_sqft_pm + '/sqft/pm' : 'N/A'}</p>
+                <p><strong>Report Period:</strong> ${row.report_period || 'N/A'}</p>
+                <p><strong>Source File:</strong> ${row.source_file}</p>
+                <p><strong>Extraction Method:</strong> ${row.extraction_method}</p>
+                <hr style="border-color: var(--card-border); margin: 1rem 0;">
+                <p><strong>Raw Extraction Remarks:</strong></p>
+                <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 8px; font-family: monospace; font-size: 0.82rem; word-break: break-all;">
+                    ${row.raw_remarks || 'No additional remarks'}
+                </div>
+            `;
+            document.getElementById('detail-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('detail-modal').classList.remove('active');
+        }
+
+        // Initial Load
+        loadData();
+        loadAuditLog();
+    </script>
+</body>
+</html>

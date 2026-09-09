@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Commercial Real Estate PowerPoint Pitch Deck Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --panel-bg: rgba(26, 34, 53, 0.7);
+            --card-bg: #161F33;
+            --accent-amber: #F59E0B;
+            --accent-gold: #D97706;
+            --accent-blue: #3B82F6;
+            --text-main: #F8FAFC;
+            --text-muted: #94A3B8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(245, 158, 11, 0.3);
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.06) 0px, transparent 50%);
+        }
+
+        header {
+            padding: 20px 40px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            sticky: top;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent-amber), var(--accent-gold));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+        }
+
+        .brand-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: var(--text-main);
+        }
+
+        .brand-title p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 40px;
+            width: 100%;
+            flex: 1;
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 30px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .panel-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent-amber);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select, textarea {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 12px 14px;
+            color: var(--text-main);
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--accent-amber);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--accent-amber), var(--accent-gold));
+            color: #000;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 14px 20px;
+            border-radius: var(--radius-md);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent-amber);
+            color: var(--accent-amber);
+        }
+
+        /* Results Area */
+        .results-area {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .metrics-banner {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .metric-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .metric-card .label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .metric-card .val {
+            font-family: 'Outfit', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--accent-amber);
+        }
+
+        .metric-card .sub {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 280px);
+            padding-right: 6px;
+        }
+
+        .prop-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.25s ease;
+            position: relative;
+        }
+
+        .prop-card:hover {
+            border-color: var(--border-highlight);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .prop-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .prop-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .prop-dev {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-amber);
+            text-transform: uppercase;
+        }
+
+        .badge {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .prop-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px 0;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .detail-item .lbl {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .detail-item .txt {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .prop-footer {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Upload Area */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent-amber);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .upload-area i {
+            font-size: 24px;
+            color: var(--accent-amber);
+            margin-bottom: 8px;
+        }
+
+        .modal-download {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--accent-amber);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .modal-icon {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--accent-amber);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px; margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">
+                <i class="fa-solid fa-file-powerpoint"></i>
+            </div>
+            <div class="brand-title">
+                <h1>LLM Real Estate PPT Generator</h1>
+                <p>Automated Client Presentation Builder & Filter Engine</p>
+            </div>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <span class="badge" id="totalListingsBadge"><i class="fa-solid fa-database"></i> Loading database...</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Left Panel: Requirement Inputs -->
+        <div class="panel">
+            <div class="panel-title">
+                <i class="fa-solid fa-sliders"></i> Client Requirements & Prompt
+            </div>
+
+            <div class="form-group">
+                <label>Natural Language Requirement Prompt</label>
+                <textarea id="searchQuery" placeholder="e.g. Need 20000 sq ft warm shell office space in Outer Ring Road under 80 per sqft..."></textarea>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Client Name</label>
+                    <input type="text" id="clientName" value="Target Client Corporation">
+                </div>
+                <div class="form-group">
+                    <label>Proposal Title</label>
+                    <input type="text" id="reqSummary" value="Office Space Options Pitch">
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Micromarket</label>
+                    <select id="micromarketSelect">
+                        <option value="all">All Micromarkets</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Fitout Type</label>
+                    <select id="fitoutSelect">
+                        <option value="all">All Fitout Types</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Developer Group</label>
+                    <select id="developerSelect">
+                        <option value="all">All Developers</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Slide Template</label>
+                    <select id="templateSelect">
+                        <option value="">Default Executive Theme</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Min Area (Sq Ft)</label>
+                    <input type="number" id="minArea" placeholder="e.g. 10000">
+                </div>
+                <div class="form-group">
+                    <label>Max Area (Sq Ft)</label>
+                    <input type="number" id="maxArea" placeholder="e.g. 50000">
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Min Rent (₹/sqft)</label>
+                    <input type="number" id="minRent" placeholder="e.g. 50">
+                </div>
+                <div class="form-group">
+                    <label>Max Rent (₹/sqft)</label>
+                    <input type="number" id="maxRent" placeholder="e.g. 100">
+                </div>
+            </div>
+
+            <!-- Custom PPT Template Upload -->
+            <div class="upload-area" onclick="document.getElementById('templateFileInput').click()">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <div style="font-size: 12px; font-weight: 600;">Upload Sample PPT Format (.pptx)</div>
+                <div style="font-size: 10px; color: var(--text-muted);">Drop your custom master slide deck here</div>
+                <input type="file" id="templateFileInput" accept=".pptx,.potx" style="display: none;" onchange="uploadTemplateFile(this)">
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="filterListings()">
+                    <i class="fa-solid fa-filter"></i> Filter
+                </button>
+                <button class="btn" style="flex: 2;" onclick="generatePPT()">
+                    <i class="fa-solid fa-file-powerpoint"></i> Generate PPT
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Panel: Matched Listings Preview & Analytics -->
+        <div class="results-area">
+            <div class="metrics-banner">
+                <div class="metric-card">
+                    <div class="label">Matched Options</div>
+                    <div class="val" id="statCount">0</div>
+                    <div class="sub">Properties Filtered</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Total Available Area</div>
+                    <div class="val" id="statArea">0 Sq. Ft.</div>
+                    <div class="sub">Combined Space</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Average Rent Rate</div>
+                    <div class="val" id="statRent">₹0 / sqft</div>
+                    <div class="sub">Monthly Base Rent</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Regions Covered</div>
+                    <div class="val" id="statRegions">0</div>
+                    <div class="sub">Bangalore Zones</div>
+                </div>
+            </div>
+
+            <div class="cards-grid" id="cardsGrid">
+                <!-- Dynamic cards populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Download Modal -->
+    <div class="modal-download" id="downloadModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-icon">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <h2 style="font-family: 'Outfit'; font-size: 22px;">Presentation Ready!</h2>
+            <p id="modalMsg" style="font-size: 13px; color: var(--text-muted);"></p>
+            <a id="modalDownloadBtn" href="#" class="btn" style="text-decoration: none;">
+                <i class="fa-solid fa-download"></i> Download PowerPoint (.pptx)
+            </a>
+            <button class="btn btn-secondary" onclick="document.getElementById('downloadModal').style.display='none'">Close</button>
+        </div>
+    </div>
+
+    <script>
+        let currentOptions = [];
+
+        async function initDashboard() {
+            try {
+                const res = await fetch('/api/options');
+                const data = await res.json();
+                
+                document.getElementById('totalListingsBadge').innerHTML = `<i class="fa-solid fa-database"></i> ${data.total_listings} Listings in DB`;
+
+                // Populate dropdowns
+                const mmSelect = document.getElementById('micromarketSelect');
+                data.micromarkets.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m; opt.textContent = m;
+                    mmSelect.appendChild(opt);
+                });
+
+                const fitSelect = document.getElementById('fitoutSelect');
+                data.fitouts.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f; opt.textContent = f;
+                    fitSelect.appendChild(opt);
+                });
+
+                const devSelect = document.getElementById('developerSelect');
+                data.developers.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d; opt.textContent = d;
+                    devSelect.appendChild(opt);
+                });
+
+                const tplSelect = document.getElementById('templateSelect');
+                data.templates.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t; opt.textContent = t;
+                    tplSelect.appendChild(opt);
+                });
+
+                filterListings();
+            } catch (err) {
+                console.error("Initialization Error:", err);
+            }
+        }
+
+        function getPayload() {
+            return {
+                query: document.getElementById('searchQuery').value,
+                client_name: document.getElementById('clientName').value,
+                requirement_summary: document.getElementById('reqSummary').value,
+                micromarket: document.getElementById('micromarketSelect').value,
+                fitout: document.getElementById('fitoutSelect').value,
+                developer: document.getElementById('developerSelect').value,
+                template_name: document.getElementById('templateSelect').value,
+                min_area: parseFloat(document.getElementById('minArea').value) || null,
+                max_area: parseFloat(document.getElementById('maxArea').value) || null,
+                min_rent: parseFloat(document.getElementById('minRent').value) || null,
+                max_rent: parseFloat(document.getElementById('maxRent').value) || null
+            };
+        }
+
+        async function filterListings() {
+            const payload = getPayload();
+            const res = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            // Update stats
+            document.getElementById('statCount').textContent = data.summary.count;
+            document.getElementById('statArea').textContent = data.summary.total_area.toLocaleString() + " Sq. Ft.";
+            document.getElementById('statRent').textContent = `₹${data.summary.avg_rent} / sqft`;
+            document.getElementById('statRegions').textContent = data.summary.micromarkets_covered.length;
+
+            renderCards(data.records);
+        }
+
+        function renderCards(records) {
+            const grid = document.getElementById('cardsGrid');
+            grid.innerHTML = '';
+
+            if (!records || records.length === 0) {
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-muted);">
+                    <i class="fa-solid fa-magnifying-glass" style="font-size: 40px; margin-bottom: 14px; opacity: 0.4;"></i>
+                    <p>No commercial listings matched your current criteria.</p>
+                </div>`;
+                return;
+            }
+
+            records.forEach((r, idx) => {
+                const card = document.createElement('div');
+                card.className = 'prop-card';
+                card.innerHTML = `
+                    <div class="prop-header">
+                        <div>
+                            <div class="prop-dev">${r.developer_name || 'Developer'}</div>
+                            <div class="prop-title">${r.property_name || r.building_block_tower || 'Commercial Space'}</div>
+                        </div>
+                        <span class="badge">#${idx + 1} Match</span>
+                    </div>
+
+                    <div class="prop-details">
+                        <div class="detail-item">
+                            <div class="lbl">Location</div>
+                            <div class="txt">${r.micromarket_location || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="lbl">Available Area</div>
+                            <div class="txt">${r.available_area_sqft || 'N/A'} Sq. Ft.</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="lbl">Fitout Status</div>
+                            <div class="txt">${r.fitout_status || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="lbl">Rent Rate</div>
+                            <div class="txt">₹${r.rent_rate_sqft_pm || 'N/A'} / sqft</div>
+                        </div>
+                    </div>
+
+                    <div class="prop-footer">
+                        <span><i class="fa-regular fa-clock"></i> ${r.timeline_possession || 'Immediate'}</span>
+                        <span><i class="fa-solid fa-building"></i> ${r.building_block_tower || 'Tower'}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function generatePPT() {
+            const payload = getPayload();
+            
+            const btn = event.currentTarget;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PPT...`;
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/generate-ppt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                if (!res.ok) {
+                    alert("Error: " + (data.detail || "Failed to generate PPT presentation."));
+                    return;
+                }
+
+                document.getElementById('modalMsg').textContent = `Generated PowerPoint presentation deck featuring ${data.options_included} commercial property options.`;
+                document.getElementById('modalDownloadBtn').href = data.download_url;
+                document.getElementById('downloadModal').style.display = 'flex';
+            } catch (err) {
+                alert("Failed to connect to PPT generator server.");
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
+
+        async function uploadTemplateFile(input) {
+            if (!input.files || input.files.length === 0) return;
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+
+            try {
+                const res = await fetch('/api/upload-template', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    initDashboard();
+                } else {
+                    alert("Upload error: " + data.detail);
+                }
+            } catch (err) {
+                alert("Upload failed.");
+            }
+        }
+
+        window.onload = initDashboard;
+    </script>
+</body>
+</html>

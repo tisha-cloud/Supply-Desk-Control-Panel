@@ -1,0 +1,24 @@
+# control-panel is its own repository for now; it is folded in during the
+# deployment workstream, when extraction/ and LLM/ are vendored into the backend.
+/control-panel/
+
+# Source workbooks and landlord documents - hundreds of MB of binary, and the
+# landlord files are client-confidential.
+*.xlsx
+*.xls
+BLR_Builders_Developers_Supply/
+generated_decks/
+!LLM/templates/*.pptx
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Caches and build artefacts
+.llm_cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
