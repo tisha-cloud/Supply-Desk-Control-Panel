@@ -161,3 +161,40 @@ The Supply Database tab is the working surface:
   and navigating away with unsaved edits warns first.
 - Derived rows stay labelled: a `Balance Floors` row is marked *derived*, and a
   reconstructed building size shows a banner naming the arithmetic behind it.
+
+---
+
+## Troubleshooting
+
+### "Supabase is not configured on the backend"
+
+The backend reads `backend/.env` **once, at import time**. A backend process
+started before that file existed - or before you last edited it - keeps
+reporting `supabase_configured: false` no matter what the file now says.
+
+Check which backend the app is actually talking to:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+If the response has no `row_counts` field, it is running code older than that
+diagnostic and needs restarting.
+
+On Windows a uvicorn process killed uncleanly can leave the port bound under a
+PID that no longer resolves: `netstat` still lists it, `Stop-Process` reports
+"cannot find a process with the process identifier", and the socket keeps
+answering. Nothing but a reboot frees it. Until then, move the backend:
+
+```
+backend/.env      BACKEND_PORT=8100
+.env.local        BACKEND_URL=http://127.0.0.1:8100
+```
+
+Both files are read at startup, so restart the backend and the Next.js server
+after changing them.
+
+### The page shows an old build
+
+`next start` serves the `.next` directory as it was when the process started.
+If you rebuilt while it was running, stop it and start it again.
