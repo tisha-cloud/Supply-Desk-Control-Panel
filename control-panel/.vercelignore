@@ -1,0 +1,18 @@
+# Vercel builds the Next.js app only. The FastAPI backend is deployed to
+# Render, from control-panel/backend/Dockerfile.
+#
+# Without this, Vercel auto-detects backend/main.py plus backend/requirements.txt
+# as a second application and offers to mount it at /api/backend - which is
+# exactly where src/app/api/backend/[...path]/route.ts already lives. That route
+# is the proxy that reads the caller session from cookies and attaches it as a
+# bearer token, so losing it to a duplicate FastAPI deployment would send every
+# backend call out unauthenticated.
+#
+# It would not have worked anyway: PyMuPDF, pandas and Pillow together exceed
+# the serverless bundle limit, and a workbook import outlives the function
+# timeout.
+backend/
+
+# Database migrations are applied through the Supabase SQL editor, not by the
+# web build.
+supabase/
