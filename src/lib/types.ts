@@ -1,3 +1,9 @@
+/**
+ * The listing category. `conventional | managed | sale` are the three the desk
+ * trades; `coworking` and `other` exist only so records written before those
+ * two were merged still typecheck. Use `canonicalSupplyType` from `./supply`
+ * before comparing or displaying one.
+ */
 export type SupplyType = "conventional" | "managed" | "coworking" | "sale" | "other";
 export type OfferingLevel = "yes" | "limited" | "no";
 export type OccupancyStatus = "available" | "occupied" | "unknown";
@@ -161,8 +167,27 @@ export interface DeckPreviewBuilding {
   available_sqft: number | null;
   available_seats: number | null;
   rent_psf: number | null;
+  price_per_seat: number | null;
+  condition: string;
+  timeline: string;
+  /** How many vacant options in this building feed the figures above. */
+  options: number;
+  photos: number;
   supply_type: SupplyType;
 }
+
+/** What the deck builder decided a prompt was asking for. */
+export interface DeckPreview {
+  criteria: Record<string, unknown>;
+  count: number;
+  /** "coworking" under 15 seats, "managed" at or above it, null for an area brief. */
+  product: "coworking" | "managed" | null;
+  product_label: string | null;
+  product_note: string | null;
+  buildings: DeckPreviewBuilding[];
+}
+
+export type DeckFormat = "pptx" | "xlsx";
 
 /** A proposed organisation merge, as returned by the backend. */
 export interface DuplicateOrganisation {

@@ -26,6 +26,8 @@ from xml.etree import ElementTree as ET
 import openpyxl
 
 import db
+
+from services import categories
 from extractor import schema
 
 NS = {
@@ -411,13 +413,16 @@ def import_workbook(xlsx_path: str, job_id: Optional[str] = None,
     Parse the workbook and write it into Supabase. Returns a stats dict.
 
     `supply_type` tags every building this workbook describes - it is the
-    Managed Office Space supply file, so the default is 'managed'. Operators
-    that also run coworking are recorded on the organisation, not by
-    reclassifying their buildings.
+    Managed Office Space supply file, so the default is 'managed'. Managed and
+    co-working are one listing category: the same operator sells the same
+    seats, and which product a client is buying depends only on how many seats
+    they want. Operators that also run coworking are recorded on the
+    organisation, not by reclassifying their buildings.
 
     With `dry_run` the workbook is parsed and counted but nothing is written,
     which is how the parse gets checked before it touches the database.
     """
+    supply_type = categories.canonical_supply_type(supply_type) or "managed"
     stats = {"sheets": 0, "buildings": 0, "spaces": 0, "images": 0,
              "operators": 0, "contacts": 0, "skipped": 0, "errors": [],
              "supply_type": supply_type, "dry_run": dry_run,

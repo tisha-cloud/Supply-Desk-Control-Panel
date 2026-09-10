@@ -16,7 +16,13 @@ import {
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { backend } from "@/lib/backend";
 import { indianNumber } from "@/lib/format";
-import { SUPPLY_TYPES, SUPPLY_TONE, supplyLabel, type SupplyTypeValue } from "@/lib/supply";
+import {
+  SUPPLY_TYPES,
+  canonicalSupplyType,
+  supplyLabel,
+  supplyTone,
+  type SupplyTypeValue,
+} from "@/lib/supply";
 import { ImportPanel } from "@/components/ImportPanel";
 import { compareValues, Pagination, SortHeader, type SortState } from "@/components/DataTable";
 import { isMissingSchema, MigrationNotice, RlsNotice, SetupNotice } from "@/components/SetupNotice";
@@ -126,7 +132,12 @@ export default function DataPage() {
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const b of data ?? []) map.set(b.supply_type, (map.get(b.supply_type) ?? 0) + 1);
+    // Count against the canonical category, so a legacy `coworking` row is
+    // counted under Managed / Co-working rather than in a tab that no longer exists.
+    for (const b of data ?? []) {
+      const key = canonicalSupplyType(b.supply_type);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
     return map;
   }, [data]);
 
@@ -134,7 +145,7 @@ export default function DataPage() {
     const needle = search.trim().toLowerCase();
     const filtered = (data ?? []).filter((b) => {
       const d = derive(b);
-      if (category && b.supply_type !== category) return false;
+      if (category && canonicalSupplyType(b.supply_type) !== category) return false;
       if (market && b.micro_markets?.code !== market) return false;
       if (operator && !d.operatorIds.has(operator)) return false;
       if (availability === "available" && d.vacantOptions === 0) return false;
@@ -156,7 +167,7 @@ export default function DataPage() {
           name: row.name,
           operator: row.operator?.name ?? row.developer?.name ?? "",
           market: row.micro_markets?.code ?? "",
-          category: row.supply_type,
+          category: canonicalSupplyType(row.supply_type),
           total: row.total_size_sqft,
           available: d.availableSqft || d.availableSeats,
           options: d.options,
@@ -320,14 +331,7 @@ export default function DataPage() {
             label: t.label,
             count: counts.get(t.value) ?? 0,
           })),
-        ]
-          .filter(
-            (tab) =>
-              tab.value === "" ||
-              tab.count > 0 ||
-              ["conventional", "managed", "coworking"].includes(tab.value),
-          )
-          .map((tab) => {
+        ].map((tab) => {
             const active = category === tab.value;
             return (
               <button
@@ -569,7 +573,7 @@ export default function DataPage() {
                         )}
                       </td>
                       <td className="td">
-                        <span className={`chip ${SUPPLY_TONE[building.supply_type] ?? ""}`}>
+                        <span className={`chip ${supplyTone(building.supply_type)}`}>
                           {supplyLabel(building.supply_type)}
                         </span>
                       </td>

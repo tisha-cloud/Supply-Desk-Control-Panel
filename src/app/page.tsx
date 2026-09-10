@@ -13,7 +13,7 @@ import {
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { backend } from "@/lib/backend";
 import { indianNumber } from "@/lib/format";
-import { supplyLabel } from "@/lib/supply";
+import { canonicalSupplyType, supplyLabel } from "@/lib/supply";
 import { BarList, SplitBar } from "@/components/charts";
 import { isMissingSchema, MigrationNotice, RlsNotice, SetupNotice } from "@/components/SetupNotice";
 import {
@@ -89,11 +89,14 @@ async function loadTotals(): Promise<Totals> {
   // Available area per category, so the three products can be compared directly.
   const byCategory = new Map<string, { buildings: number; available: number }>();
   for (const building of buildingRows) {
-    const entry = byCategory.get(building.supply_type) ?? { buildings: 0, available: 0 };
+    const key = canonicalSupplyType(building.supply_type);
+    const entry = byCategory.get(key) ?? { buildings: 0, available: 0 };
     entry.buildings += 1;
-    byCategory.set(building.supply_type, entry);
+    byCategory.set(key, entry);
   }
-  const categoryOf = new Map(buildingRows.map((b) => [b.id, b.supply_type]));
+  const categoryOf = new Map(
+    buildingRows.map((b) => [b.id, canonicalSupplyType(b.supply_type)]),
+  );
   for (const space of spaceRows) {
     if (space.occupancy !== "available") continue;
     const key = categoryOf.get(space.building_id);
@@ -106,7 +109,8 @@ async function loadTotals(): Promise<Totals> {
   return {
     buildings: buildingRows.length,
     conventional: buildingRows.filter((b) => b.supply_type === "conventional").length,
-    managed: buildingRows.filter((b) => b.supply_type === "managed").length,
+    managed: buildingRows.filter((b) => canonicalSupplyType(b.supply_type) === "managed")
+      .length,
     spaces: spaceRows.length,
     availableSqft,
     occupiedSqft,

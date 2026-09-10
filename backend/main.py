@@ -154,8 +154,13 @@ async def import_managed_workbook(background: BackgroundTasks,
     The file is ~318MB, almost all of it embedded photographs, so it can also be
     imported by server path to avoid pushing it through the browser.
     """
-    if supply_type not in ("conventional", "managed", "coworking", "sale", "other"):
+    from services import categories
+    canonical = categories.canonical_supply_type(supply_type)
+    if not canonical:
         raise HTTPException(400, "Unknown supply_type: %s" % supply_type)
+    # Managed and co-working are one listing category; the distinction is made
+    # per requirement at proposal time, not per record at import time.
+    supply_type = canonical
     if not config.supabase_configured() and not dry_run:
         raise HTTPException(503, "Supabase is not configured.")
 
@@ -263,11 +268,20 @@ class DeckRequest(BaseModel):
     client_name: Optional[str] = "Valued Client"
     template_name: Optional[str] = None
     building_ids: Optional[List[str]] = None
+    # "pptx" for the client-facing proposal, "xlsx" for the same options as a
+    # grid. Both are built from one shortlist.
+    output_format: str = "pptx"
+
+
+DECK_MEDIA_TYPES = {
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 
 @app.post("/api/decks/generate")
 def generate_deck(request: DeckRequest):
-    """Prompt in, .pptx out. Runs inline - a deck takes seconds, not minutes."""
+    """Prompt in, .pptx or .xlsx out. Runs inline - it takes seconds."""
     if not config.supabase_configured():
         raise HTTPException(503, "Supabase is not configured.")
     from services import deck_service
@@ -278,6 +292,7 @@ def generate_deck(request: DeckRequest):
             client_name=request.client_name or "Valued Client",
             template_name=request.template_name,
             building_ids=request.building_ids or None,
+            output_format=request.output_format or "pptx",
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc))
@@ -290,8 +305,9 @@ def generate_deck(request: DeckRequest):
         with open(result["path"], "rb") as fh:
             data = fh.read()
         storage_path = "decks/%s" % result["filename"]
-        db.upload_bytes(config.BUCKET_DECKS, storage_path, data,
-                        "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        media_type = DECK_MEDIA_TYPES.get(
+            os.path.splitext(result["filename"])[1].lower(), "application/octet-stream")
+        db.upload_bytes(config.BUCKET_DECKS, storage_path, data, media_type)
         created = db.client().table("decks").insert({
             "title": result["criteria"].get("title") or request.query[:80],
             "client_name": request.client_name,
@@ -309,6 +325,7 @@ def generate_deck(request: DeckRequest):
     return {
         "deck_id": deck_id,
         "filename": result["filename"],
+        "format": result.get("format", "pptx"),
         "options": result["options"],
         "criteria": result["criteria"],
         "building_ids": result["building_ids"],
@@ -324,21 +341,40 @@ def preview_deck(request: DeckRequest):
         raise HTTPException(503, "Supabase is not configured.")
     from services import deck_service
 
+    from services import categories
+
     criteria = deck_service.parse_requirement(request.query)
     buildings = deck_service.shortlist(criteria)
+
+    def summarise(building):
+        vacant = building.get("_vacant") or []
+        conditions = sorted({s.get("condition") for s in vacant if s.get("condition")})
+        timelines = sorted({s.get("timeline") for s in vacant if s.get("timeline")})
+        return {
+            "id": building["id"],
+            "name": building["name"],
+            "micro_market": building.get("_micro_market"),
+            "landlord": building.get("_landlord"),
+            "available_sqft": building.get("_available_sqft"),
+            "available_seats": building.get("_available_seats"),
+            "rent_psf": building.get("_rent"),
+            "price_per_seat": building.get("_seat_price"),
+            "condition": ", ".join(conditions),
+            "timeline": ", ".join(timelines),
+            "options": len(vacant),
+            "photos": len(building.get("building_images") or []),
+            # One listing category: a row still stored as `coworking` reads as
+            # managed here so the reviewer sees the categories they know.
+            "supply_type": categories.canonical_supply_type(building.get("supply_type")),
+        }
+
     return {
         "criteria": criteria,
         "count": len(buildings),
-        "buildings": [{
-            "id": b["id"],
-            "name": b["name"],
-            "micro_market": b.get("_micro_market"),
-            "landlord": b.get("_landlord"),
-            "available_sqft": b.get("_available_sqft"),
-            "available_seats": b.get("_available_seats"),
-            "rent_psf": b.get("_rent"),
-            "supply_type": b.get("supply_type"),
-        } for b in buildings],
+        "product": criteria.get("product"),
+        "product_label": criteria.get("product_label"),
+        "product_note": criteria.get("product_note"),
+        "buildings": [summarise(b) for b in buildings],
     }
 
 
@@ -353,7 +389,8 @@ def download_deck(filename: str):
             raise HTTPException(404, "Deck not found")
     return FileResponse(
         path, filename=os.path.basename(path),
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        media_type=DECK_MEDIA_TYPES.get(
+            os.path.splitext(path)[1].lower(), "application/octet-stream"))
 
 
 @app.get("/api/templates")

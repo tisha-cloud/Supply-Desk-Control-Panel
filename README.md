@@ -6,7 +6,7 @@ One Supabase database behind three tools:
 |---|---|---|
 | **Extraction** | Reads landlord PDFs, decks, spreadsheets and screenshots into the database, deriving occupied space from what each document withholds | Python pipeline in `../extraction` |
 | **Supply Database** | Imports the Managed Office Space workbook with its embedded photographs, then full CRUD by hand | Next.js ↔ Supabase directly |
-| **Deck Builder** | Plain-English requirement → shortlist from the database → `.pptx` built on your options template | Python generator in `../LLM` |
+| **Deck Builder** | Plain-English requirement → shortlist you can edit → `.pptx` on your options template, or the same options as `.xlsx` | Python generator in `../LLM` |
 
 ```
         ┌── Extraction ──┐
@@ -28,12 +28,15 @@ two Python projects to it.
 
 ### 1. Supabase
 
-Create a project at [supabase.com](https://supabase.com/dashboard), then run the two
-migrations from the SQL editor, oldest first:
+Create a project at [supabase.com](https://supabase.com/dashboard), then run every
+migration from the SQL editor, oldest first:
 
 ```
-supabase/migrations/0001_init.sql          -- tables, views, triggers
-supabase/migrations/0002_rls_and_storage.sql -- buckets and row-level security
+supabase/migrations/0001_init.sql             -- tables, views, triggers
+supabase/migrations/0002_rls_and_storage.sql  -- buckets and row-level security
+supabase/migrations/0003_space_operator.sql   -- operator per suite, not per tower
+supabase/migrations/0004_anon_access.sql      -- browser access before login exists
+supabase/migrations/0005_three_categories.sql -- fold co-working into managed
 ```
 
 ### 2. Credentials
@@ -103,14 +106,29 @@ the same report are superseded automatically.
 
 ### The three categories
 
-`supply_type` on each building is `conventional`, `managed` or `coworking` (plus
-`sale`/`other` catch-alls). Managed and co-working come from the same operators but are
-different products, so the distinction is recorded twice, deliberately:
+`supply_type` on each building is **`conventional`**, **`managed`** or **`sale`**.
 
-- `buildings.supply_type` — how *this building* is let.
-- `organisations.offers_managed` / `offers_coworking` — what the *operator* does in
-  general, as Yes / Limited / No. Table Space is managed-only; 91Springboard is
-  coworking-first; WeWork does both.
+Managed and co-working are one category, not two. The listing is identical — the same
+operator, the same centre, the same seats — and which product a client is buying depends
+only on the size of the requirement that walks in the door:
+
+| Requirement | Quoted as |
+|---|---|
+| fewer than 15 seats | Co-working |
+| 15 seats or more | Managed office |
+
+So the product name belongs to the *requirement*, and the Deck Builder applies it when the
+proposal is written. Keeping it on the building made the two categories impossible to tell
+apart when editing — the same Table Space centre could be filed either way depending on who
+typed it in — and a co-working filter then hid managed stock that was equally available.
+
+What the operator does in general is still recorded, on the organisation rather than the
+building: `organisations.offers_managed` / `offers_coworking`, as Yes / Limited / No. Table
+Space is managed-only; 91Springboard is coworking-first; WeWork does both.
+
+> The `coworking` enum value survives so that a row restored from a pre-`0005` backup still
+> loads. Nothing writes it, and `services/categories.py` (backend) and `src/lib/supply.ts`
+> (browser) fold it into `managed` on read.
 
 `buildings` is the shared physical asset — a tower is the same building whether it is
 let conventionally by the floor or operated as managed office by the seat. What differs
@@ -151,16 +169,37 @@ clean without losing the product line.
 
 The Supply Database tab is the working surface:
 
-- **Category tabs** across the top filter to Conventional / Managed / Co-working, each
-  with a live count.
+- **Category tabs** across the top filter to Conventional / Managed & Co-working / Sale,
+  each with a live count.
 - **Tick rows** to select buildings, then move them between categories in bulk or delete
   them. This is the fast way to split an imported workbook if part of it is really
-  co-working.
+  conventional or for sale.
 - **A building page** edits every field inline. Availability rows, contacts and
   photographs each add/edit/delete in place and save on blur; `Ctrl+S` saves the form,
   and navigating away with unsaved edits warns first.
 - Derived rows stay labelled: a `Balance Floors` row is marked *derived*, and a
   reconstructed building size shows a banner naming the arithmetic behind it.
+
+---
+
+## Building a proposal
+
+The Deck Builder tab is one pass with a review step in the middle:
+
+1. **Describe the requirement** in plain English. The model turns it into filters — micro-market,
+   area or headcount, condition, budget, landlord — and those filters query the database.
+2. **Read what it decided.** The interpreted filters are shown as chips, and a seat requirement
+   states which product it will be quoted as and why (see the table above).
+3. **Edit the shortlist.** Remove any option the model picked, reorder the ones that stay, and
+   restore anything you removed by mistake. The table shows availability, price, condition,
+   timeline and whether a photograph exists, so an option can be judged without leaving the page.
+4. **Pick a format.** *PowerPoint proposal* renders your options template; *Excel sheet* writes
+   the same options as a filterable grid with a cover sheet naming the client and the brief.
+   Both are built from the same shortlist, so no figure can differ between them, and you can
+   make both.
+
+Every number comes from the database. The model chooses *which* options to show and writes the
+narrative copy; it is never the source of a figure.
 
 ---
 

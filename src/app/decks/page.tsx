@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Download, Presentation, Sparkles, X } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  Presentation,
+  RotateCcw,
+  Sparkles,
+  Undo2,
+  X,
+} from "lucide-react";
 import { backend, BackendError } from "@/lib/backend";
 import { indianNumber } from "@/lib/format";
-import { SUPPLY_TONE, supplyLabel } from "@/lib/supply";
+import { MANAGED_SEAT_THRESHOLD, supplyLabel, supplyTone } from "@/lib/supply";
 import {
   Callout,
   EmptyState,
@@ -15,19 +23,20 @@ import {
   Tag,
   useToast,
 } from "@/components/ui";
-import type { DeckPreviewBuilding } from "@/lib/types";
+import type { DeckFormat, DeckPreview, DeckPreviewBuilding } from "@/lib/types";
 
 const EXAMPLES = [
   "30,000 sq ft warm shell on ORR, ready to move in",
   "150 managed seats in Koramangala or Indiranagar",
+  "8 desks in HSR for a small team",
   "Fully furnished floor in the CBD under ₹150 per sq ft",
-  "Campus option in Whitefield above 1 lakh sq ft",
 ];
 
-interface PreviewState {
-  criteria: Record<string, unknown>;
-  count: number;
-  buildings: DeckPreviewBuilding[];
+/** One produced file. Both formats can be made from the same shortlist. */
+interface Output {
+  filename: string;
+  format: DeckFormat;
+  options: number;
 }
 
 export default function DecksPage() {
@@ -36,10 +45,10 @@ export default function DecksPage() {
   const [query, setQuery] = useState("");
   const [clientName, setClientName] = useState("");
   const [template, setTemplate] = useState("");
-  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [chosen, setChosen] = useState<string[]>([]);
-  const [result, setResult] = useState<{ filename: string; options: number } | null>(null);
-  const [busy, setBusy] = useState<"preview" | "generate" | null>(null);
+  const [outputs, setOutputs] = useState<Output[]>([]);
+  const [busy, setBusy] = useState<"preview" | DeckFormat | null>(null);
 
   const { data: templates } = useSWR("templates", () => backend.templates(), {
     shouldRetryOnError: false,
@@ -48,17 +57,16 @@ export default function DecksPage() {
     shouldRetryOnError: false,
   });
 
-  // A fresh shortlist starts fully selected - the model's picks are the default.
-  useEffect(() => {
-    if (preview) setChosen(preview.buildings.map((b) => b.id));
-  }, [preview]);
-
   async function runPreview() {
     if (!query.trim()) return;
     setBusy("preview");
-    setResult(null);
+    setOutputs([]);
     try {
-      setPreview(await backend.previewDeck({ query }));
+      const matched = await backend.previewDeck({ query });
+      setPreview(matched);
+      // A fresh shortlist starts fully selected: the picks the model made are
+      // the default, and editing them is the reviewer opting out of one.
+      setChosen(matched.buildings.map((b) => b.id));
     } catch (err) {
       setPreview(null);
       toast({
@@ -71,27 +79,45 @@ export default function DecksPage() {
     }
   }
 
-  async function runGenerate(useChosen: boolean) {
-    if (!query.trim()) return;
-    setBusy("generate");
+  async function build(format: DeckFormat) {
+    if (!query.trim() || chosen.length === 0) return;
+    setBusy(format);
     try {
-      const deck = await backend.generateDeck({
+      const result = await backend.generateDeck({
         query,
         client_name: clientName.trim() || "Valued Client",
-        template_name: template || null,
-        ...(useChosen && chosen.length ? { building_ids: chosen } : {}),
+        template_name: format === "pptx" ? template || null : null,
+        building_ids: chosen,
+        output_format: format,
       });
-      setResult({ filename: deck.filename, options: deck.options });
-      toast({ tone: "success", title: "Deck ready", message: `${deck.options} options included.` });
+      // Replace any earlier file of the same format; keep the other one, so
+      // making both a deck and a sheet leaves both links on screen.
+      setOutputs((prev) => [
+        ...prev.filter((o) => o.format !== format),
+        { filename: result.filename, format, options: result.options },
+      ]);
+      toast({
+        tone: "success",
+        title: format === "pptx" ? "Proposal ready" : "Spreadsheet ready",
+        message: `${result.options} option${result.options === 1 ? "" : "s"} included.`,
+      });
     } catch (err) {
       toast({
         tone: "danger",
-        title: "Deck generation failed",
+        title: "Could not build the file",
         message: err instanceof BackendError ? err.message : String(err),
       });
     } finally {
       setBusy(null);
     }
+  }
+
+  function remove(id: string) {
+    setChosen((prev) => prev.filter((x) => x !== id));
+  }
+
+  function restore(id: string) {
+    setChosen((prev) => [...prev, id]);
   }
 
   function move(id: string, delta: number) {
@@ -105,21 +131,25 @@ export default function DecksPage() {
     });
   }
 
+  const byId = useMemo(
+    () => new Map((preview?.buildings ?? []).map((b) => [b.id, b])),
+    [preview],
+  );
+  const included = chosen
+    .map((id) => byId.get(id))
+    .filter(Boolean) as DeckPreviewBuilding[];
+  const dropped = (preview?.buildings ?? []).filter((b) => !chosen.includes(b.id));
+
+  // Everything the model inferred, minus the keys the page renders itself.
   const criteriaTags = preview
     ? Object.entries(preview.criteria).filter(
-        ([, v]) => v !== null && v !== undefined && v !== "" && (!Array.isArray(v) || v.length),
+        ([key, v]) =>
+          !["title", "limit", "product", "product_label", "product_note"].includes(key) &&
+          v !== null &&
+          v !== undefined &&
+          v !== "" &&
+          (!Array.isArray(v) || v.length),
       )
-    : [];
-
-  const ordered = preview
-    ? [...preview.buildings].sort((a, b) => {
-        const ia = chosen.indexOf(a.id);
-        const ib = chosen.indexOf(b.id);
-        if (ia === -1 && ib === -1) return 0;
-        if (ia === -1) return 1;
-        if (ib === -1) return -1;
-        return ia - ib;
-      })
     : [];
 
   return (
@@ -127,7 +157,7 @@ export default function DecksPage() {
       <PageHeader
         eyebrow="Feature 3"
         title="Deck Builder"
-        description="Describe the requirement in plain English. The model turns it into filters, the database supplies the buildings, and your options template produces the proposal."
+        description="Describe the requirement in plain English. The model turns it into filters and picks the options; you edit the shortlist, then take it as a PowerPoint proposal or an Excel grid."
       />
 
       {health?.llm_provider === "none" ? (
@@ -180,7 +210,7 @@ export default function DecksPage() {
           </div>
           <div>
             <label className="label" htmlFor="template">
-              Template
+              Template <span className="font-normal text-ink-3">(PowerPoint only)</span>
             </label>
             <select
               id="template"
@@ -198,38 +228,17 @@ export default function DecksPage() {
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button className="btn-primary" onClick={runPreview} disabled={!query.trim() || busy !== null}>
-            <Sparkles className="h-4 w-4" aria-hidden />
-            {busy === "preview" ? "Matching…" : "Find options"}
-          </button>
+        <div className="mt-5">
           <button
-            className="btn-secondary"
-            onClick={() => runGenerate(false)}
+            className="btn-primary"
+            onClick={runPreview}
             disabled={!query.trim() || busy !== null}
           >
-            {busy === "generate" && !preview ? "Building…" : "Skip review, build deck"}
+            <Sparkles className="h-4 w-4" aria-hidden />
+            {busy === "preview" ? "Matching…" : preview ? "Match again" : "Find options"}
           </button>
         </div>
       </Section>
-
-      {result ? (
-        <div className="mt-5">
-          <Callout tone="success" title="Proposal ready">
-            <p>
-              {result.options} option{result.options === 1 ? "" : "s"} included, every figure taken
-              from the database.
-            </p>
-            <a
-              className="btn-primary mt-3"
-              href={`/api/backend/api/decks/download/${encodeURIComponent(result.filename)}`}
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Download {result.filename}
-            </a>
-          </Callout>
-        </div>
-      ) : null}
 
       {busy === "preview" ? (
         <Spinner label="Querying the database…" />
@@ -240,9 +249,19 @@ export default function DecksPage() {
               {preview.count} option{preview.count === 1 ? "" : "s"} matched
             </h2>
             <p className="text-sm text-ink-3">
-              Untick anything you do not want, reorder with the arrows, then build the deck.
+              Remove anything you do not want, reorder with the arrows, then pick a format.
             </p>
           </div>
+
+          {preview.product_note ? (
+            <div className="mb-4">
+              <Callout tone="info" title={`Quoted as ${preview.product_label}`}>
+                {preview.product_note} Managed and co-working are one listing, so the shortlist
+                is drawn from all of it — only the wording changes, at{" "}
+                {MANAGED_SEAT_THRESHOLD} seats.
+              </Callout>
+            </div>
+          ) : null}
 
           {criteriaTags.length > 0 ? (
             <div className="mb-4 flex flex-wrap gap-1.5">
@@ -264,116 +283,183 @@ export default function DecksPage() {
           ) : (
             <>
               <div className="card table-scroll overflow-hidden">
-                <table className="w-full min-w-[820px]">
+                <table className="w-full min-w-[980px]">
                   <thead className="bg-surface-2">
                     <tr>
-                      <th className="th w-10" />
-                      <th className="th w-14">Order</th>
+                      <th className="th w-16">Order</th>
                       <th className="th">Building</th>
                       <th className="th">Operator / Landlord</th>
                       <th className="th">Market</th>
                       <th className="th">Category</th>
                       <th className="th text-right">Available</th>
-                      <th className="th text-right">Rent</th>
+                      <th className="th text-right">Price</th>
+                      <th className="th">Condition</th>
+                      <th className="th">Timeline</th>
+                      <th className="th w-10" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {ordered.map((building) => {
-                      const index = chosen.indexOf(building.id);
-                      const included = index >= 0;
-                      return (
-                        <tr key={building.id} className={included ? "" : "opacity-45"}>
-                          <td className="td">
-                            <input
-                              type="checkbox"
-                              aria-label={`Include ${building.name}`}
-                              checked={included}
-                              onChange={() =>
-                                setChosen((prev) =>
-                                  included
-                                    ? prev.filter((id) => id !== building.id)
-                                    : [...prev, building.id],
-                                )
-                              }
-                            />
-                          </td>
-                          <td className="td">
-                            {included ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-4 text-xs tabular-nums text-ink-3">
-                                  {index + 1}
-                                </span>
-                                <span className="flex flex-col leading-none">
-                                  <button
-                                    className="px-1 text-[11px] text-ink-3 hover:text-ink disabled:opacity-25"
-                                    aria-label={`Move ${building.name} up`}
-                                    disabled={index === 0}
-                                    onClick={() => move(building.id, -1)}
-                                  >
-                                    ▲
-                                  </button>
-                                  <button
-                                    className="px-1 text-[11px] text-ink-3 hover:text-ink disabled:opacity-25"
-                                    aria-label={`Move ${building.name} down`}
-                                    disabled={index === chosen.length - 1}
-                                    onClick={() => move(building.id, 1)}
-                                  >
-                                    ▼
-                                  </button>
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-ink-3">—</span>
-                            )}
-                          </td>
-                          <td className="td font-medium">{building.name}</td>
-                          <td className="td text-ink-2">{building.landlord || "—"}</td>
-                          <td className="td">
-                            {building.micro_market ? <Tag>{building.micro_market}</Tag> : "—"}
-                          </td>
-                          <td className="td">
-                            <span className={`chip ${SUPPLY_TONE[building.supply_type] ?? ""}`}>
-                              {supplyLabel(building.supply_type)}
+                    {included.map((building, index) => (
+                      <tr key={building.id}>
+                        <td className="td">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-4 text-xs tabular-nums text-ink-3">
+                              {index + 1}
                             </span>
-                          </td>
-                          <td className="td text-right tabular-nums">
-                            {building.available_sqft
-                              ? `${indianNumber(building.available_sqft)} Sft`
-                              : building.available_seats
-                                ? `${indianNumber(building.available_seats)} seats`
-                                : "—"}
-                          </td>
-                          <td className="td text-right tabular-nums">
-                            {building.rent_psf ? `₹${indianNumber(building.rent_psf)}` : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <span className="flex flex-col leading-none">
+                              <button
+                                className="px-1 text-[11px] text-ink-3 hover:text-ink disabled:opacity-25"
+                                aria-label={`Move ${building.name} up`}
+                                disabled={index === 0}
+                                onClick={() => move(building.id, -1)}
+                              >
+                                ▲
+                              </button>
+                              <button
+                                className="px-1 text-[11px] text-ink-3 hover:text-ink disabled:opacity-25"
+                                aria-label={`Move ${building.name} down`}
+                                disabled={index === included.length - 1}
+                                onClick={() => move(building.id, 1)}
+                              >
+                                ▼
+                              </button>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="td font-medium">
+                          {building.name}
+                          {building.photos === 0 ? (
+                            <span className="ml-2 text-xs font-normal text-warning">
+                              no photo
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="td text-ink-2">{building.landlord || "—"}</td>
+                        <td className="td">
+                          {building.micro_market ? <Tag>{building.micro_market}</Tag> : "—"}
+                        </td>
+                        <td className="td">
+                          <span className={`chip ${supplyTone(building.supply_type)}`}>
+                            {supplyLabel(building.supply_type)}
+                          </span>
+                        </td>
+                        <td className="td text-right tabular-nums">
+                          {building.available_sqft
+                            ? `${indianNumber(building.available_sqft)} Sft`
+                            : building.available_seats
+                              ? `${indianNumber(building.available_seats)} seats`
+                              : "—"}
+                        </td>
+                        <td className="td text-right tabular-nums">
+                          {building.price_per_seat
+                            ? `₹${indianNumber(building.price_per_seat)}/seat`
+                            : building.rent_psf
+                              ? `₹${indianNumber(building.rent_psf)}/sft`
+                              : "—"}
+                        </td>
+                        <td className="td text-ink-2">{building.condition || "—"}</td>
+                        <td className="td text-ink-2">{building.timeline || "—"}</td>
+                        <td className="td">
+                          <button
+                            className="btn-ghost btn-sm"
+                            aria-label={`Remove ${building.name}`}
+                            title="Remove from the proposal"
+                            onClick={() => remove(building.id)}
+                          >
+                            <X className="h-4 w-4" aria-hidden />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <button
-                  className="btn-primary"
-                  onClick={() => runGenerate(true)}
-                  disabled={chosen.length === 0 || busy !== null}
-                >
-                  <Presentation className="h-4 w-4" aria-hidden />
-                  {busy === "generate"
-                    ? "Building proposal…"
-                    : `Build proposal with ${chosen.length} option${chosen.length === 1 ? "" : "s"}`}
-                </button>
-                {chosen.length !== preview.buildings.length ? (
+              {dropped.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-2 p-3">
+                  <span className="text-sm text-ink-2">Removed ({dropped.length}):</span>
+                  {dropped.map((building) => (
+                    <button
+                      key={building.id}
+                      className="chip border border-border bg-surface text-ink-2 hover:border-accent-border hover:text-accent"
+                      onClick={() => restore(building.id)}
+                      title="Put this option back"
+                    >
+                      <Undo2 className="h-3 w-3" aria-hidden />
+                      {building.name}
+                    </button>
+                  ))}
+                  <span className="flex-1" />
                   <button
-                    className="btn-ghost"
+                    className="btn-ghost btn-sm"
                     onClick={() => setChosen(preview.buildings.map((b) => b.id))}
                   >
-                    <X className="h-4 w-4" aria-hidden />
-                    Reset to the model&rsquo;s picks
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                    Restore all
                   </button>
-                ) : null}
+                </div>
+              ) : null}
+
+              {/* -------------------------------------------- choose a format */}
+              <div className="card mt-5 p-4">
+                <p className="mb-3 text-sm text-ink-2">
+                  {included.length === 0 ? (
+                    <span className="text-warning">
+                      Every option has been removed. Put at least one back to build a file.
+                    </span>
+                  ) : (
+                    <>
+                      Take {included.length} option{included.length === 1 ? "" : "s"} as:
+                    </>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="btn-primary"
+                    onClick={() => build("pptx")}
+                    disabled={included.length === 0 || busy !== null}
+                  >
+                    <Presentation className="h-4 w-4" aria-hidden />
+                    {busy === "pptx" ? "Building…" : "PowerPoint proposal"}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => build("xlsx")}
+                    disabled={included.length === 0 || busy !== null}
+                  >
+                    <FileSpreadsheet className="h-4 w-4" aria-hidden />
+                    {busy === "xlsx" ? "Building…" : "Excel sheet"}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-ink-3">
+                  Both are built from the same shortlist, so the figures cannot disagree. Make
+                  one, the other, or both.
+                </p>
               </div>
+
+              {outputs.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {outputs.map((output) => (
+                    <Callout
+                      key={output.format}
+                      tone="success"
+                      title={output.format === "pptx" ? "Proposal ready" : "Spreadsheet ready"}
+                    >
+                      <p>
+                        {output.options} option{output.options === 1 ? "" : "s"} included, every
+                        figure taken from the database.
+                      </p>
+                      <a
+                        className="btn-primary mt-3"
+                        href={`/api/backend/api/decks/download/${encodeURIComponent(output.filename)}`}
+                      >
+                        <Download className="h-4 w-4" aria-hidden />
+                        Download {output.filename}
+                      </a>
+                    </Callout>
+                  ))}
+                </div>
+              ) : null}
             </>
           )}
         </div>

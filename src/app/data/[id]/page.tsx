@@ -13,7 +13,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { SUPPLY_TYPES, SUPPLY_TONE, supplyLabel, type SupplyTypeValue } from "@/lib/supply";
+import { SUPPLY_TYPES, supplyLabel, supplyTone, type SupplyTypeValue } from "@/lib/supply";
 import { createClient, imageUrl, isSupabaseConfigured } from "@/lib/supabase/client";
 import { indianNumber } from "@/lib/format";
 import { SplitBar } from "@/components/charts";
@@ -356,7 +356,7 @@ export default function BuildingPage({ params }: { params: Promise<{ id: string 
           {building.developer?.name || building.operator?.name ? (
             <Tag>{building.developer?.name ?? building.operator?.name}</Tag>
           ) : null}
-          <span className={`chip ${SUPPLY_TONE[building.supply_type] ?? ""}`}>
+          <span className={`chip ${supplyTone(building.supply_type)}`}>
             {supplyLabel(building.supply_type)}
           </span>
           {building.operator_brand ? <Tag>{building.operator_brand}</Tag> : null}

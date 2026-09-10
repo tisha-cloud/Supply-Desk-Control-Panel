@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 import config
 import db
 
+from services import categories
+
 from ai_client import AIClient  # from ../../LLM
 
 MICRO_MARKET_HINTS = {
@@ -42,9 +44,12 @@ Requirement: "{query}"
 Return ONLY a JSON object with these keys (use null when the requirement does not say):
   micro_markets   : array of codes from [CBD, ORR, WF, North-BLR, E-City, Indiranagar,
                     KRM, HSR Layout, BG Road, JP-Nagar, Jayanagar, Kanakapura Rd, BTM]
-  supply_type     : "conventional" | "managed" | null
+  supply_type     : "conventional" | "managed" | "sale" | null
+                    ("managed" covers managed and co-working stock, which is
+                     one listing - use it for any flex/seat requirement)
   min_area_sqft   : number or null
   max_area_sqft   : number or null
+  seats           : the headcount they asked for, as a number, else null
   min_seats       : number or null
   max_seats       : number or null
   max_rent_psf    : number or null
@@ -74,6 +79,28 @@ def parse_requirement(query: str) -> Dict[str, Any]:
     criteria.setdefault("limit", 6)
     criteria.setdefault("title", "Office Space Options")
     criteria["limit"] = max(1, min(int(criteria.get("limit") or 6), 20))
+    return _apply_seat_rule(criteria)
+
+
+def _apply_seat_rule(criteria: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Decide managed vs co-working from the headcount, not from the listing.
+
+    The stock is the same either way, so this only ever changes what the
+    proposal calls the product. A brief with no headcount gets no product
+    label at all rather than a guessed one.
+    """
+    criteria["supply_type"] = categories.canonical_supply_type(criteria.get("supply_type"))
+
+    seats = criteria.get("seats") or criteria.get("min_seats")
+    product = categories.product_for_seats(seats)
+    if product:
+        criteria["seats"] = seats
+        criteria["product"] = product
+        criteria["product_label"] = categories.product_label(product)
+        criteria["product_note"] = categories.describe_product(product, seats)
+        # A seat requirement is flex stock whatever the parser said.
+        criteria["supply_type"] = "managed"
     return criteria
 
 
@@ -106,6 +133,7 @@ def _fallback_parse(query: str) -> Dict[str, Any]:
         "supply_type": "managed" if re.search(r"managed|coworking|seats?|flex", low) else None,
         "min_area_sqft": area * 0.8 if area else None,
         "max_area_sqft": area * 1.6 if area else None,
+        "seats": seats,
         "min_seats": seats * 0.8 if seats else None,
         "max_seats": seats * 1.6 if seats else None,
         "max_rent_psf": None,
@@ -132,8 +160,9 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
         "spaces(*), building_images(storage_path, is_primary, sort_order, kind), "
         "contacts(name, designation, phone, email)"
     )
-    if criteria.get("supply_type"):
-        query = query.eq("supply_type", criteria["supply_type"])
+    stored = categories.stored_supply_types(criteria.get("supply_type"))
+    if stored:
+        query = query.in_("supply_type", stored)
 
     rows = query.limit(600).execute().data or []
 
@@ -213,16 +242,26 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _fmt_int(value) -> str:
-    try:
-        return "{:,}".format(int(round(float(value))))
-    except (TypeError, ValueError):
-        return ""
-
-
-def _fmt_sqft(value) -> str:
+    """A number for the client, or nothing. Zero is absence, not a figure."""
     try:
         number = int(round(float(value)))
     except (TypeError, ValueError):
+        return ""
+    return "{:,}".format(number) if number else ""
+
+
+def _fmt_sqft(value) -> str:
+    """
+    An area in Indian digit grouping, or nothing.
+
+    Zero returns empty rather than "0 Sq. Ft.": a seat-based option has no
+    area, and printing a zero told a client the suite was nothing at all.
+    """
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        return ""
+    if not number:
         return ""
     digits = str(number)
     if len(digits) > 3:
@@ -237,8 +276,17 @@ def _fmt_sqft(value) -> str:
     return digits + " Sq. Ft."
 
 
-def to_option_records(buildings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Shape database rows into the flat dicts the PPT generator expects."""
+def to_option_records(buildings: List[Dict[str, Any]],
+                     criteria: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """
+    Shape database rows into the flat dicts the PPT and Excel writers expect.
+
+    `criteria` supplies the product name - managed or co-working - which is a
+    property of the requirement rather than of the building, so it is stamped
+    onto every option in the proposal rather than read back off each record.
+    """
+    criteria = criteria or {}
+    requirement_product = criteria.get("product")
     records = []
     for row in buildings:
         vacant = row.get("_vacant") or []
@@ -259,6 +307,9 @@ def to_option_records(buildings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 image_url = ""
 
         records.append({
+            "_product_label": categories.product_label(
+                requirement_product
+                or categories.canonical_supply_type(row.get("supply_type"))),
             "building_name": row.get("name"),
             "address_location": row.get("address") or row.get("locality") or "",
             "micromarket_category": row.get("_micro_market") or "",
@@ -304,17 +355,28 @@ def to_option_records(buildings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return records
 
 
+OUTPUT_FORMATS = ("pptx", "xlsx")
+
+
 def generate(query: str, client_name: str = "Valued Client",
              template_name: Optional[str] = None,
              deck_id: Optional[str] = None,
-             building_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+             building_ids: Optional[List[str]] = None,
+             output_format: str = "pptx") -> Dict[str, Any]:
     """
-    Full path: prompt -> criteria -> shortlist -> .pptx on disk.
+    Full path: prompt -> criteria -> shortlist -> .pptx or .xlsx on disk.
 
-    `building_ids` pins the deck to an exact set of buildings, in that order -
+    `building_ids` pins the output to an exact set of buildings, in that order -
     used when the operator has reviewed the model's shortlist and adjusted it.
     Without it the shortlist is recomputed from the prompt.
+
+    Both formats are rendered from the same option records, so the sheet and
+    the deck can never disagree about a number.
     """
+    output_format = (output_format or "pptx").lower()
+    if output_format not in OUTPUT_FORMATS:
+        raise ValueError("Unknown output format: %s" % output_format)
+
     criteria = parse_requirement(query)
     buildings = shortlist(criteria)
 
@@ -334,13 +396,28 @@ def generate(query: str, client_name: str = "Valued Client",
             "No buildings in the database match that requirement. "
             "Try widening the area or micro-market, or import more supply first.")
 
-    records = to_option_records(buildings)
+    records = to_option_records(buildings, criteria)
+
+    safe_title = re.sub(r"[^A-Za-z0-9]+", "_", criteria.get("title") or "Options").strip("_")[:60]
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = "%s_%s.%s" % (safe_title, stamp, output_format)
+
+    if output_format == "xlsx":
+        from services import deck_excel
+        out_path = deck_excel.build(
+            records, criteria, client_name, query,
+            os.path.join(config.DECK_DIR, filename))
+        return {
+            "path": out_path,
+            "filename": filename,
+            "format": "xlsx",
+            "criteria": criteria,
+            "building_ids": [b["id"] for b in buildings],
+            "options": len(records),
+        }
 
     from ppt_generator import PPTGenerator
     generator = PPTGenerator(template_name=template_name or "options format.pptx")
-
-    safe_title = re.sub(r"[^A-Za-z0-9]+", "_", criteria.get("title") or "Options").strip("_")[:60]
-    filename = "%s_%s.pptx" % (safe_title, datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     # generate_presentation writes into LLM/generated_decks and returns that path.
     produced = generator.generate_presentation(
@@ -364,6 +441,7 @@ def generate(query: str, client_name: str = "Valued Client",
     return {
         "path": out_path,
         "filename": filename,
+        "format": "pptx",
         "criteria": criteria,
         "building_ids": [b["id"] for b in buildings],
         "options": len(records),

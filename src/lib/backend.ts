@@ -6,7 +6,7 @@
  * straight to :8000, so the backend URL stays server-side and there is no CORS
  * negotiation in the browser.
  */
-import type { DeckPreviewBuilding, DuplicateGroup, IngestJob } from "./types";
+import type { DeckFormat, DeckPreview, DuplicateGroup, IngestJob } from "./types";
 
 export const BACKEND_URL =
   process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000";
@@ -92,21 +92,22 @@ export const backend = {
     ),
 
   previewDeck: (body: { query: string }) =>
-    request<{
-      criteria: Record<string, unknown>;
-      count: number;
-      buildings: DeckPreviewBuilding[];
-    }>("/api/decks/preview", { method: "POST", body: JSON.stringify(body) }),
+    request<DeckPreview>("/api/decks/preview", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   generateDeck: (body: {
     query: string;
     client_name?: string;
     template_name?: string | null;
     building_ids?: string[];
+    output_format?: DeckFormat;
   }) =>
     request<{
       deck_id: string | null;
       filename: string;
+      format: DeckFormat;
       options: number;
       criteria: Record<string, unknown>;
       building_ids: string[];
