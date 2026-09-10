@@ -1,7 +1,3 @@
-# control-panel is its own repository for now; it is folded in during the
-# deployment workstream, when extraction/ and LLM/ are vendored into the backend.
-/control-panel/
-
 # Source workbooks and landlord documents - hundreds of MB of binary, and the
 # landlord files are client-confidential.
 *.xlsx
@@ -15,6 +11,16 @@ generated_decks/
 .env.*
 !.env.example
 
+# Node and Next.js artefacts
+node_modules/
+.next/
+out/
+next-env.d.ts
+.vercel/
+
+# Backend scratch space: uploads and generated decks, recreated at runtime.
+control-panel/backend/.work/
+
 # Caches and build artefacts
 .llm_cache/
 __pycache__/
@@ -22,3 +28,4 @@ __pycache__/
 .pytest_cache/
 venv/
 .venv/
+.git-nested-backup/
