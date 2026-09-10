@@ -174,6 +174,12 @@ export interface DeckPreviewBuilding {
   options: number;
   photos: number;
   supply_type: SupplyType;
+  /** How this option sits against the requirement. */
+  fit: "meets" | "short" | "unknown" | null;
+  /** Seats or square feet by which a "short" option falls below the brief. */
+  shortfall: number;
+  operator: string | null;
+  developer: string | null;
 }
 
 /** What the deck builder decided a prompt was asking for. */
@@ -184,6 +190,11 @@ export interface DeckPreview {
   product: "coworking" | "managed" | null;
   product_label: string | null;
   product_note: string | null;
+  /** The size the brief asked for, and whether that is seats or square feet. */
+  required: number | null;
+  required_unit: "seats" | "area" | null;
+  /** How many of the matches actually meet it, as opposed to falling short. */
+  meets: number;
   buildings: DeckPreviewBuilding[];
 }
 

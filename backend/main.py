@@ -387,14 +387,24 @@ def preview_deck(request: DeckRequest):
             "timeline": ", ".join(timelines),
             "options": len(vacant),
             "photos": len(building.get("building_images") or []),
+            # How this option sits against the requirement: "meets", "short"
+            # by `shortfall`, or "unknown" when the record carries no size.
+            "fit": building.get("_fit"),
+            "shortfall": building.get("_shortfall") or 0,
+            "operator": building.get("_operator") or None,
+            "developer": building.get("_developer") or None,
             # One listing category: a row still stored as `coworking` reads as
             # managed here so the reviewer sees the categories they know.
             "supply_type": categories.canonical_supply_type(building.get("supply_type")),
         }
 
+    required, unit = deck_service.requirement_size(criteria)
     return {
         "criteria": criteria,
         "count": len(buildings),
+        "required": required,
+        "required_unit": unit,
+        "meets": sum(1 for b in buildings if b.get("_fit") == "meets"),
         "product": criteria.get("product"),
         "product_label": criteria.get("product_label"),
         "product_note": criteria.get("product_note"),

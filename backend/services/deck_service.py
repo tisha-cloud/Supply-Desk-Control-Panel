@@ -56,9 +56,47 @@ Return ONLY a JSON object with these keys (use null when the requirement does no
   condition       : one of "Bare Shell","Warm Shell","Pre - Furnished","Fully Furnished","Managed Office" or null
   developers      : array of landlord names mentioned, else []
   ready_now       : true if they need immediate/ready-to-move space, else null
-  limit           : how many options to show (default 6)
+  limit           : only if they asked for a specific number of options
+                    ("show me 5"), otherwise null - every option that fits is
+                    shown and the operator trims the list by hand
   title           : a short deck title for this requirement
 """
+
+
+# A safety ceiling, not a shortlist length. Nothing should ever return more
+# than this many options; a market has nowhere near that much live stock.
+MAX_OPTIONS = 200
+
+# How far below the requirement an option may fall and still be worth showing.
+# A 12-seat centre is not a near miss for a 150-seat brief, it is noise.
+NEAR_MISS_FLOOR = 0.7
+
+
+def requirement_size(criteria: Dict[str, Any]):
+    """
+    What the brief actually asks for, as (amount, unit).
+
+    The parser is inconsistent about which key it fills - a seat count arrives
+    as `seats` or as `min_seats` depending on how the requirement was phrased -
+    and reading only one of them meant a brief for 150 seats carried no size at
+    all. With no size, nothing was ranked by fit and a 70-seat centre sorted
+    above a 167-seat one.
+    """
+    for key in ("seats", "min_seats"):
+        value = criteria.get(key)
+        if value:
+            try:
+                return float(value), "seats"
+            except (TypeError, ValueError):
+                pass
+    for key in ("area_sqft", "min_area_sqft"):
+        value = criteria.get(key)
+        if value:
+            try:
+                return float(value), "area"
+            except (TypeError, ValueError):
+                pass
+    return None, None
 
 
 def parse_requirement(query: str) -> Dict[str, Any]:
@@ -76,9 +114,15 @@ def parse_requirement(query: str) -> Dict[str, Any]:
     if not criteria:
         criteria = _fallback_parse(query)
 
-    criteria.setdefault("limit", 6)
     criteria.setdefault("title", "Office Space Options")
-    criteria["limit"] = max(1, min(int(criteria.get("limit") or 6), 20))
+    # A count is honoured only when the brief actually named one. Defaulting to
+    # six silently hid two thirds of the market: a search for 150 seats in
+    # Koramangala returned 6 of 25 available centres, and the ones it dropped
+    # included the best fits.
+    if criteria.get("limit"):
+        criteria["limit"] = max(1, min(int(criteria["limit"]), MAX_OPTIONS))
+    else:
+        criteria["limit"] = None
     return _apply_seat_rule(criteria)
 
 
@@ -131,6 +175,7 @@ def _fallback_parse(query: str) -> Dict[str, Any]:
     return {
         "micro_markets": markets,
         "supply_type": "managed" if re.search(r"managed|coworking|seats?|flex", low) else None,
+        "area_sqft": area,
         "min_area_sqft": area * 0.8 if area else None,
         "max_area_sqft": area * 1.6 if area else None,
         "seats": seats,
@@ -166,11 +211,8 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     rows = query.limit(600).execute().data or []
 
+    required, unit = requirement_size(criteria)
     codes = set(criteria.get("micro_markets") or [])
-    min_area = criteria.get("min_area_sqft")
-    max_area = criteria.get("max_area_sqft")
-    min_seats = criteria.get("min_seats")
-    max_seats = criteria.get("max_seats")
     max_rent = criteria.get("max_rent_psf")
     condition = (criteria.get("condition") or "").lower()
     developers = [d.lower() for d in (criteria.get("developers") or [])]
@@ -182,8 +224,17 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
         if codes and market not in codes:
             continue
 
-        landlord = ((row.get("developer") or {}).get("name")
-                    or (row.get("operator") or {}).get("name") or "")
+        # Who the client is dealing with. For managed and co-working space that
+        # is the operator running the centre - naming the developer instead
+        # billed 315Work Avenue's KRM 1 as "Sattva Group", which is the owner
+        # of the tower and not a party to the deal.
+        developer = (row.get("developer") or {}).get("name") or ""
+        operator = ((row.get("operator") or {}).get("name")
+                    or row.get("operator_brand") or "")
+        if categories.canonical_supply_type(row.get("supply_type")) == "managed":
+            landlord = operator or developer
+        else:
+            landlord = developer or operator
         if developers and not any(d in landlord.lower() for d in developers):
             continue
 
@@ -198,14 +249,22 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         area = sum(s.get("area_sqft") or 0 for s in vacant)
         seats = sum(s.get("seats") or 0 for s in vacant)
-        if min_area and area and area < min_area:
-            continue
-        if max_area and area and area > max_area * 3:   # allow a large block to be split
-            pass
-        if min_seats and seats and seats < min_seats:
-            continue
-        if max_seats and seats and seats > max_seats * 3:
-            pass
+
+        # Classify against the requirement rather than filtering on it. An
+        # option that is slightly short is still worth putting in front of a
+        # client - it is their call, not the filter's - but it has to be
+        # labelled, and it must not outrank one that actually fits.
+        fit, shortfall, surplus = "unknown", 0.0, 0.0
+        if required:
+            have = seats if unit == "seats" else area
+            if have <= 0:
+                fit = "unknown"
+            elif have >= required:
+                fit, surplus = "meets", have - required
+            elif have >= required * NEAR_MISS_FLOOR:
+                fit, shortfall = "short", required - have
+            else:
+                continue   # too small to serve this brief at all
 
         rents = [s["rent_psf"] for s in vacant if s.get("rent_psf")]
         rent = min(rents) if rents else None
@@ -214,18 +273,20 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
         if max_rent and rent and rent > max_rent:
             continue
 
-        # Prefer options that actually fit, are ready, and have a photograph.
-        score = 0.0
-        if min_area and area:
-            score -= abs(area - min_area) / max(min_area, 1)
-        if min_seats and seats:
-            score -= abs(seats - min_seats) / max(min_seats, 1)
+        # Readiness and a photograph decide ties; they never promote an option
+        # over one that fits the requirement better.
+        quality = 0.0
         if any((s.get("timeline") or "").lower() == "immediate" for s in vacant):
-            score += 1.5
+            quality += 1.5
         if row.get("building_images"):
-            score += 1.0
+            quality += 1.0
         if row.get("total_size_sqft"):
-            score += 0.3
+            quality += 0.3
+
+        row["_fit"] = fit
+        row["_shortfall"] = shortfall
+        row["_surplus"] = surplus
+        row["_quality"] = quality
 
         row["_vacant"] = vacant
         row["_available_sqft"] = area
@@ -233,12 +294,27 @@ def shortlist(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
         row["_rent"] = rent
         row["_seat_price"] = seat_price
         row["_landlord"] = landlord
+        row["_operator"] = operator
+        row["_developer"] = developer
         row["_micro_market"] = market
-        row["_score"] = score
         scored.append(row)
 
-    scored.sort(key=lambda r: -r["_score"])
-    return scored[: criteria.get("limit", 6)]
+    # Options that meet the requirement come first, tightest fit leading, so an
+    # exact match is not buried under a centre five times the size. Near misses
+    # follow, smallest gap first. Readiness and photographs only break ties.
+    order = {"meets": 0, "short": 1, "unknown": 2}
+    scored.sort(key=lambda r: (
+        order.get(r["_fit"], 3),
+        r["_surplus"] if r["_fit"] == "meets" else r["_shortfall"],
+        -r["_quality"],
+        r["name"] or "",
+    ))
+
+    # Every match is returned. The operator removes what they do not want, on a
+    # screen that shows them all - which is a judgement the filter cannot make
+    # and should not have been making by truncating to six.
+    limit = criteria.get("limit") or MAX_OPTIONS
+    return scored[:limit]
 
 
 def _fmt_int(value) -> str:

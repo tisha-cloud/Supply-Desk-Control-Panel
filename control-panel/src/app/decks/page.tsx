@@ -247,9 +247,16 @@ export default function DecksPage() {
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-semibold tracking-tight">
               {preview.count} option{preview.count === 1 ? "" : "s"} matched
+              {preview.required && preview.meets < preview.count ? (
+                <span className="ml-2 text-sm font-normal text-ink-3">
+                  {preview.meets} meet the requirement, {preview.count - preview.meets} fall
+                  short
+                </span>
+              ) : null}
             </h2>
             <p className="text-sm text-ink-3">
-              Remove anything you do not want, reorder with the arrows, then pick a format.
+              Every match is listed. Remove what you do not want, reorder with the arrows,
+              then pick a format.
             </p>
           </div>
 
@@ -283,7 +290,7 @@ export default function DecksPage() {
           ) : (
             <>
               <div className="card table-scroll overflow-hidden">
-                <table className="w-full min-w-[980px]">
+                <table className="w-full min-w-[1060px]">
                   <thead className="bg-surface-2">
                     <tr>
                       <th className="th w-16">Order</th>
@@ -292,6 +299,7 @@ export default function DecksPage() {
                       <th className="th">Market</th>
                       <th className="th">Category</th>
                       <th className="th text-right">Available</th>
+                      <th className="th">Fit</th>
                       <th className="th text-right">Price</th>
                       <th className="th">Condition</th>
                       <th className="th">Timeline</th>
@@ -349,6 +357,22 @@ export default function DecksPage() {
                             : building.available_seats
                               ? `${indianNumber(building.available_seats)} seats`
                               : "—"}
+                        </td>
+                        <td className="td">
+                          {building.fit === "meets" ? (
+                            <span className="chip bg-positive-soft text-positive">fits</span>
+                          ) : building.fit === "short" ? (
+                            <span
+                              className="chip bg-warning-soft text-warning"
+                              title={`Short of the requirement by ${indianNumber(
+                                building.shortfall,
+                              )} ${preview.required_unit === "area" ? "sq ft" : "seats"}`}
+                            >
+                              short {indianNumber(building.shortfall)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-ink-3">—</span>
+                          )}
                         </td>
                         <td className="td text-right tabular-nums">
                           {building.price_per_seat
