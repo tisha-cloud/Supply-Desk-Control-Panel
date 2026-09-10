@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { SUPPLY_TYPES, supplyLabel, supplyTone, type SupplyTypeValue } from "@/lib/supply";
+import { Can } from "@/lib/access";
 import { createClient, imageUrl, isSupabaseConfigured } from "@/lib/supabase/client";
 import { indianNumber } from "@/lib/format";
 import { SplitBar } from "@/components/charts";
@@ -825,6 +826,7 @@ export default function BuildingPage({ params }: { params: Promise<{ id: string 
           </Section>
 
           {/* --------------------------------------------------- danger zone */}
+          <Can permission="supply.delete">
           <Section title="Delete this building">
             <p className="mb-4 text-sm text-ink-2">
               Removes the building and everything attached to it — availability rows,
@@ -835,6 +837,7 @@ export default function BuildingPage({ params }: { params: Promise<{ id: string 
               Delete {building.name}
             </button>
           </Section>
+          </Can>
         </>
       ) : null}
     </>

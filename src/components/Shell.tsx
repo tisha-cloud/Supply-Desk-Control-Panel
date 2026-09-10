@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
@@ -8,19 +8,59 @@ import {
   Database,
   FileSearch,
   LayoutDashboard,
+  LogOut,
   Menu,
   Presentation,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { backend } from "@/lib/backend";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { useAccess } from "@/lib/access";
 import { ThemeToggle } from "./ThemeToggle";
 
+/**
+ * Navigation, named for what each screen does.
+ *
+ * `permission` decides whether the link is shown at all: a viewer has no
+ * business seeing a Document Intake tab that will refuse every action on it.
+ */
 const LINKS = [
-  { href: "/", label: "Overview", icon: LayoutDashboard, hint: "Portfolio at a glance" },
-  { href: "/extraction", label: "Extraction", icon: FileSearch, hint: "Read landlord documents" },
-  { href: "/data", label: "Supply Database", icon: Database, hint: "Buildings, spaces, photos" },
-  { href: "/decks", label: "Deck Builder", icon: Presentation, hint: "Prompt to PowerPoint" },
+  {
+    href: "/",
+    label: "Overview",
+    icon: LayoutDashboard,
+    hint: "Portfolio at a glance",
+    permission: null,
+  },
+  {
+    href: "/extraction",
+    label: "Document Intake",
+    icon: FileSearch,
+    hint: "Read landlord files into stock",
+    permission: "intake.run",
+  },
+  {
+    href: "/data",
+    label: "Supply Inventory",
+    icon: Database,
+    hint: "Buildings, availability, photos",
+    permission: "supply.read",
+  },
+  {
+    href: "/decks",
+    label: "Proposal Builder",
+    icon: Presentation,
+    hint: "Requirement to PowerPoint or Excel",
+    permission: "proposals.write",
+  },
+  {
+    href: "/access",
+    label: "User Access",
+    icon: ShieldCheck,
+    hint: "People, roles and permissions",
+    permission: "users.manage",
+  },
 ];
 
 function ConnectionDot() {
@@ -35,7 +75,7 @@ function ConnectionDot() {
   const copy = {
     ready: { label: "All systems connected", tone: "bg-positive" },
     partial: { label: "Backend up · Supabase not configured", tone: "bg-warning" },
-    offline: { label: "Backend unreachable on :8000", tone: "bg-danger" },
+    offline: { label: "Backend unreachable", tone: "bg-danger" },
   }[state];
 
   return (
@@ -51,14 +91,12 @@ function ConnectionDot() {
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { can } = useAccess();
+  const visible = LINKS.filter((link) => !link.permission || can(link.permission));
 
   return (
     <>
-      <Link
-        href="/"
-        onClick={onNavigate}
-        className="flex items-center gap-2.5 px-3 py-1"
-      >
+      <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 px-3 py-1">
         <span
           className="grid h-8 w-8 place-items-center rounded-lg text-[11px] font-bold tracking-tight text-white"
           style={{ background: "var(--accent)" }}
@@ -66,13 +104,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           BLR
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold">Control Panel</span>
-          <span className="block truncate text-xs text-ink-3">Commercial supply</span>
+          <span className="block truncate text-sm font-semibold">Supply Desk</span>
+          <span className="block truncate text-xs text-ink-3">Bengaluru commercial</span>
         </span>
       </Link>
 
       <nav className="mt-6 flex-1 space-y-0.5">
-        {LINKS.map(({ href, label, icon: Icon, hint }) => {
+        {visible.map(({ href, label, icon: Icon, hint }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
@@ -105,6 +143,86 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+function AccountMenu() {
+  const { me, authReady, signOut } = useAccess();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function away(event: MouseEvent) {
+      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, []);
+
+  if (!authReady) {
+    return (
+      <span
+        className="chip bg-warning-soft text-warning"
+        title="Run supabase/migrations/0006_auth_and_roles.sql to switch authentication on"
+      >
+        Auth not enabled
+      </span>
+    );
+  }
+  if (!me) return null;
+
+  const initials = (me.full_name || me.email)
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <div className="relative" ref={box}>
+      <button
+        className="flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-2"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-accent-soft text-[11px] font-semibold text-accent">
+          {initials || "?"}
+        </span>
+        <span className="hidden text-left sm:block">
+          <span className="block max-w-[160px] truncate text-xs font-medium leading-tight">
+            {me.full_name || me.email}
+          </span>
+          <span className="block text-[11px] leading-tight text-ink-3">{me.role}</span>
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="animate-in absolute right-0 z-50 mt-1.5 w-60 rounded-xl border border-border bg-surface p-1.5 shadow-lg"
+        >
+          <div className="px-2.5 py-2">
+            <p className="truncate text-sm font-medium">{me.full_name || "Signed in"}</p>
+            <p className="truncate text-xs text-ink-3">{me.email}</p>
+            <p className="mt-1.5 text-xs text-ink-2">
+              Role <span className="font-medium text-ink">{me.role}</span> ·{" "}
+              {me.permissions.includes("*")
+                ? "full access"
+                : `${me.permissions.length} permission${me.permissions.length === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          <div className="my-1 h-px bg-border" />
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+            onClick={signOut}
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -115,6 +233,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // The sign-in screen has no navigation to show: there is nowhere to go yet.
+  if (pathname === "/login") return <>{children}</>;
 
   return (
     <div className="flex min-h-full">
@@ -147,6 +268,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {open ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
           </button>
           <div className="flex-1" />
+          <AccountMenu />
           <ThemeToggle />
         </header>
 

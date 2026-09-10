@@ -14,12 +14,15 @@ from typing import Any, Dict, List, Optional
 
 import config  # must import first: it wires sys.path for the reused projects
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import (BackgroundTasks, Depends, FastAPI, File, Form, HTTPException,
+                     UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+import auth
 import db
+from auth import Caller, require, require_user
 
 app = FastAPI(title="BLR Control Panel Backend", version="1.0.0")
 app.add_middleware(
@@ -69,6 +72,10 @@ def health():
         "status": "ok",
         "row_counts": counts,
         "supabase_configured": config.supabase_configured(),
+        # False until migration 0006 has been run. While it is false the
+        # backend cannot identify callers and leaves every route open, so the
+        # UI shows a banner rather than letting that pass unnoticed.
+        "auth_ready": auth.auth_schema_ready(),
         "llm_provider": provider,
         "supply_dir": config.SUPPLY_DIR,
         "supply_dir_exists": os.path.isdir(config.SUPPLY_DIR),
@@ -86,7 +93,7 @@ class ExtractionRequest(BaseModel):
     gapfill: bool = False
 
 
-@app.post("/api/extraction/run")
+@app.post("/api/extraction/run", dependencies=[Depends(require("intake.run"))])
 def start_extraction(request: ExtractionRequest, background: BackgroundTasks):
     """Kick off a pipeline run over the landlord supply folder."""
     if not config.supabase_configured():
@@ -118,7 +125,7 @@ def start_extraction(request: ExtractionRequest, background: BackgroundTasks):
     return {"job_id": job_id, "status": "queued"}
 
 
-@app.post("/api/extraction/upload")
+@app.post("/api/extraction/upload", dependencies=[Depends(require("intake.run"))])
 async def upload_source_files(developer: str = Form(...),
                               files: List[UploadFile] = File(...)):
     """Add landlord documents to the supply folder so the next run picks them up."""
@@ -141,7 +148,7 @@ async def upload_source_files(developer: str = Form(...),
 
 
 # ============================================== managed office workbook import
-@app.post("/api/import/managed-xlsx")
+@app.post("/api/import/managed-xlsx", dependencies=[Depends(require("supply.import"))])
 async def import_managed_workbook(background: BackgroundTasks,
                                   file: Optional[UploadFile] = File(None),
                                   server_path: Optional[str] = Form(None),
@@ -207,7 +214,7 @@ async def import_managed_workbook(background: BackgroundTasks,
 
 
 # ====================================================================== jobs
-@app.get("/api/jobs/{job_id}")
+@app.get("/api/jobs/{job_id}", dependencies=[Depends(require_user)])
 def get_job(job_id: str):
     """Live job state: Supabase is authoritative, in-process state is a fallback."""
     record = None
@@ -225,7 +232,7 @@ def get_job(job_id: str):
     return record
 
 
-@app.get("/api/jobs")
+@app.get("/api/jobs", dependencies=[Depends(require_user)])
 def list_jobs(kind: Optional[str] = None, limit: int = 20):
     if not config.supabase_configured():
         with _jobs_lock:
@@ -242,7 +249,7 @@ class MergeRequest(BaseModel):
     merge_ids: List[str]
 
 
-@app.get("/api/dedup/organisations")
+@app.get("/api/dedup/organisations", dependencies=[Depends(require("supply.read"))])
 def list_duplicate_organisations():
     """Proposed merges. Nothing is applied until a human confirms one."""
     if not config.supabase_configured():
@@ -251,7 +258,7 @@ def list_duplicate_organisations():
     return dedup.duplicate_report()
 
 
-@app.post("/api/dedup/organisations/merge")
+@app.post("/api/dedup/organisations/merge", dependencies=[Depends(require("supply.merge"))])
 def merge_duplicate_organisations(request: MergeRequest):
     if not config.supabase_configured():
         raise HTTPException(503, "Supabase is not configured.")
@@ -279,7 +286,7 @@ DECK_MEDIA_TYPES = {
 }
 
 
-@app.post("/api/decks/generate")
+@app.post("/api/decks/generate", dependencies=[Depends(require("proposals.write"))])
 def generate_deck(request: DeckRequest):
     """Prompt in, .pptx or .xlsx out. Runs inline - it takes seconds."""
     if not config.supabase_configured():
@@ -334,7 +341,7 @@ def generate_deck(request: DeckRequest):
     }
 
 
-@app.post("/api/decks/preview")
+@app.post("/api/decks/preview", dependencies=[Depends(require("proposals.write"))])
 def preview_deck(request: DeckRequest):
     """Show which buildings a prompt would select, without building the file."""
     if not config.supabase_configured():
@@ -378,7 +385,7 @@ def preview_deck(request: DeckRequest):
     }
 
 
-@app.get("/api/decks/download/{filename}")
+@app.get("/api/decks/download/{filename}", dependencies=[Depends(require("proposals.read"))])
 def download_deck(filename: str):
     path = os.path.join(config.DECK_DIR, os.path.basename(filename))
     if not os.path.isfile(path):
@@ -393,12 +400,41 @@ def download_deck(filename: str):
             os.path.splitext(path)[1].lower(), "application/octet-stream"))
 
 
-@app.get("/api/templates")
+@app.get("/api/templates", dependencies=[Depends(require_user)])
 def list_templates():
     if not os.path.isdir(config.TEMPLATES_DIR):
         return []
     return sorted(f for f in os.listdir(config.TEMPLATES_DIR)
                   if f.lower().endswith((".pptx", ".potx")))
+
+
+# ================================================================ user access
+import routes_access  # noqa: E402  (imported late: it depends on `auth` and `db`)
+
+app.include_router(routes_access.router)
+
+
+@app.on_event("startup")
+def bootstrap_first_admin():
+    """
+    Create the first administrator when the database has no users at all.
+
+    Creating a user requires the user-management permission, so an empty
+    profiles table has no way in. This runs only when that table is completely
+    empty and never touches an existing account.
+    """
+    try:
+        from services import users
+        created = users.ensure_seed_admin()
+    except Exception as exc:
+        print("Could not seed the first administrator: %s" % exc)
+        return
+    if created:
+        print("=" * 68)
+        print("Created the first administrator: %s" % created["email"])
+        print("Password: %s" % config.SEED_ADMIN_PASSWORD)
+        print("Change it from User Access as soon as you have signed in.")
+        print("=" * 68)
 
 
 if __name__ == "__main__":

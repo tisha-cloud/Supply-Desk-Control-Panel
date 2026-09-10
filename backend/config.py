@@ -49,6 +49,28 @@ SUPABASE_SERVICE_ROLE_KEY = (
     or ""
 ).strip()
 
+# The publishable key. The backend does not need it for data access, but the
+# Auth API requires an apikey header when it validates a user's access token.
+SUPABASE_PUBLISHABLE_KEY = (
+    os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    or os.getenv("SUPABASE_ANON_KEY")
+    or os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+    or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    or SUPABASE_SERVICE_ROLE_KEY
+).strip()
+
+# Where the project publishes the keys that sign access tokens. Derived from
+# the project URL unless overridden.
+SUPABASE_JWKS_URL = (
+    os.getenv("SUPABASE_JWKS_URL")
+    or ("%s/auth/v1/.well-known/jwks.json" % SUPABASE_URL.rstrip("/") if SUPABASE_URL else "")
+).strip()
+
+# The first administrator, created on first start when no users exist yet.
+# Change the password from the User Access screen once you are signed in.
+SEED_ADMIN_EMAIL = os.getenv("SEED_ADMIN_EMAIL", "admin@gmail.com").strip()
+SEED_ADMIN_PASSWORD = os.getenv("SEED_ADMIN_PASSWORD", "admin123")
+
 BUCKET_IMAGES = "building-images"
 BUCKET_DECKS = "decks"
 BUCKET_SOURCES = "source-files"

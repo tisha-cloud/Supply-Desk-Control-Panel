@@ -1,6 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Browser Supabase client.
@@ -14,6 +15,11 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// One client per tab. Auth state changes are broadcast to subscribers of a
+// single instance, so creating a fresh client per call would leave components
+// listening to a client that nothing signs in or out.
+let browserClient: SupabaseClient | null = null;
+
 export function createClient() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error(
@@ -22,7 +28,10 @@ export function createClient() {
         "(or NEXT_PUBLIC_SUPABASE_ANON_KEY on a legacy project).",
     );
   }
-  return createBrowserClient(SUPABASE_URL, SUPABASE_KEY);
+  if (!browserClient) {
+    browserClient = createBrowserClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return browserClient;
 }
 
 export function isSupabaseConfigured(): boolean {

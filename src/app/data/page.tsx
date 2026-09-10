@@ -25,6 +25,7 @@ import {
 } from "@/lib/supply";
 import { ImportPanel } from "@/components/ImportPanel";
 import { compareValues, Pagination, SortHeader, type SortState } from "@/components/DataTable";
+import { Can } from "@/lib/access";
 import { isMissingSchema, MigrationNotice, RlsNotice, SetupNotice } from "@/components/SetupNotice";
 import { EmptyState, PageHeader, Tag, TableSkeleton, useToast } from "@/components/ui";
 import type { SupplyType } from "@/lib/types";
@@ -286,7 +287,7 @@ export default function DataPage() {
   if (!configured) {
     return (
       <>
-        <PageHeader eyebrow="Feature 2" title="Supply Database" />
+        <PageHeader eyebrow="Stock on the desk" title="Supply Inventory" />
         <SetupNotice />
       </>
     );
@@ -295,23 +296,29 @@ export default function DataPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature 2"
-        title="Supply Database"
+        eyebrow="Stock on the desk"
+        title="Supply Inventory"
         description="Every building the three tools share — conventional, managed and co-working in one place."
         actions={
           <>
-            <Link href="/data/organisations" className="btn-secondary">
-              <Users className="h-4 w-4" aria-hidden />
-              Duplicate landlords
-            </Link>
-            <button className="btn-secondary" onClick={() => setShowImport((v) => !v)}>
-              <FileSpreadsheet className="h-4 w-4" aria-hidden />
-              Import workbook
-            </button>
-            <Link href="/data/new" className="btn-primary">
-              <Plus className="h-4 w-4" aria-hidden />
-              New building
-            </Link>
+            <Can permission="supply.merge">
+              <Link href="/data/organisations" className="btn-secondary">
+                <Users className="h-4 w-4" aria-hidden />
+                Duplicate landlords
+              </Link>
+            </Can>
+            <Can permission="supply.import">
+              <button className="btn-secondary" onClick={() => setShowImport((v) => !v)}>
+                <FileSpreadsheet className="h-4 w-4" aria-hidden />
+                Import workbook
+              </button>
+            </Can>
+            <Can permission="supply.write">
+              <Link href="/data/new" className="btn-primary">
+                <Plus className="h-4 w-4" aria-hidden />
+                New building
+              </Link>
+            </Can>
           </>
         }
       />
@@ -436,26 +443,34 @@ export default function DataPage() {
       {selected.size > 0 ? (
         <div className="animate-in card sticky top-16 z-10 mb-3 flex flex-wrap items-center gap-2 p-3">
           <span className="text-sm font-medium">{selected.size} selected</span>
-          <span className="ml-2 text-sm text-ink-2">Move to</span>
-          {SUPPLY_TYPES.filter((t) => t.importable).map((type) => (
+          <Can permission="supply.write">
+            <span className="ml-2 text-sm text-ink-2">Move to</span>
+            {SUPPLY_TYPES.filter((t) => t.importable).map((type) => (
+              <button
+                key={type.value}
+                className="btn-secondary btn-sm"
+                disabled={working}
+                onClick={() => recategorise(type.value)}
+              >
+                {type.label}
+              </button>
+            ))}
+            <span className="mx-1 h-4 w-px bg-border" />
             <button
-              key={type.value}
               className="btn-secondary btn-sm"
               disabled={working}
-              onClick={() => recategorise(type.value)}
+              onClick={() => markVerified(true)}
             >
-              {type.label}
+              Mark verified
             </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" />
-          <button className="btn-secondary btn-sm" disabled={working} onClick={() => markVerified(true)}>
-            Mark verified
-          </button>
+          </Can>
           <span className="flex-1" />
-          <button className="btn-danger btn-sm" disabled={working} onClick={deleteSelected}>
-            <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            Delete
-          </button>
+          <Can permission="supply.delete">
+            <button className="btn-danger btn-sm" disabled={working} onClick={deleteSelected}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+              Delete
+            </button>
+          </Can>
           <button className="btn-ghost btn-sm" onClick={() => setSelected(new Set())}>
             Cancel
           </button>

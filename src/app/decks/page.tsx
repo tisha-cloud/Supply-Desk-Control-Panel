@@ -155,8 +155,8 @@ export default function DecksPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature 3"
-        title="Deck Builder"
+        eyebrow="Client output"
+        title="Proposal Builder"
         description="Describe the requirement in plain English. The model turns it into filters and picks the options; you edit the shortlist, then take it as a PowerPoint proposal or an Excel grid."
       />
 

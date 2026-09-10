@@ -109,8 +109,8 @@ export default function ExtractionPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Feature 1"
-        title="Extraction"
+        eyebrow="Supply intake"
+        title="Document Intake"
         description="Turn landlord documents into database records. Availability reports, pitch decks, rent cards, spreadsheets and WhatsApp screenshots all work; occupied space is derived from what each document leaves out."
       />
 

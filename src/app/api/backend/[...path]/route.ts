@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { accessToken } from "@/lib/supabase/server";
 
 /**
  * Transparent proxy to the FastAPI backend.
@@ -7,6 +8,12 @@ import { NextRequest } from "next/server";
  * uploads stream through unchanged. Long-running work (a 318MB workbook
  * import) is started here but tracked via /api/jobs, so no request is held
  * open for the duration.
+ *
+ * It also attaches the caller identity. The session lives in cookies, and the
+ * backend wants a bearer token, so the token is read here and forwarded. Doing
+ * it in the proxy rather than in each fetch is what makes a plain download
+ * link work: a browser navigation sends cookies but never an Authorization
+ * header.
  */
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
@@ -19,6 +26,9 @@ async function proxy(request: NextRequest, path: string[]) {
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
+
+  const token = await accessToken();
+  if (token) headers.set("authorization", `Bearer ${token}`);
 
   const method = request.method;
   const hasBody = method !== "GET" && method !== "HEAD";

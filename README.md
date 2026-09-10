@@ -1,20 +1,21 @@
-# BLR Control Panel
+# Bangalore Supply Desk
 
-One Supabase database behind three tools:
+One Supabase database behind three tools, each named for what it does:
 
-| Feature | What it does | Where it runs |
+| Screen | What it does | Where it runs |
 |---|---|---|
-| **Extraction** | Reads landlord PDFs, decks, spreadsheets and screenshots into the database, deriving occupied space from what each document withholds | Python pipeline in `../extraction` |
-| **Supply Database** | Imports the Managed Office Space workbook with its embedded photographs, then full CRUD by hand | Next.js ↔ Supabase directly |
-| **Deck Builder** | Plain-English requirement → shortlist you can edit → `.pptx` on your options template, or the same options as `.xlsx` | Python generator in `../LLM` |
+| **Document Intake** | Reads landlord PDFs, decks, spreadsheets and screenshots into the database, deriving occupied space from what each document withholds | Python pipeline in `../extraction` |
+| **Supply Inventory** | Imports the supply workbook with its embedded photographs, then full CRUD by hand | Next.js ↔ Supabase directly |
+| **Proposal Builder** | Plain-English requirement → shortlist you can edit → `.pptx` on your options template, or the same options as `.xlsx` | Python generator in `../LLM` |
+| **User Access** | People, roles, and what each role is permitted to do | FastAPI ↔ Supabase Auth |
 
 ```
-        ┌── Extraction ──┐
-raw landlord files ──────┤
-                         ├──▶  SUPABASE  ◀── Managed Office xlsx + manual CRUD
-        ┌── Deck Builder ┘        │
-prompt ─┴──▶ queries the DB ──────┘
-             └─▶ generates .pptx
+     ┌── Document Intake ──┐
+raw landlord files ────────┤
+                           ├──▶  SUPABASE  ◀── supply workbook + manual CRUD
+     ┌── Proposal Builder ─┘        │
+prompt ─┴──▶ queries the DB ────────┘
+             └─▶ .pptx or .xlsx
 ```
 
 Nothing was rewritten: the extraction pipeline and the deck generator stay in Python
@@ -37,7 +38,12 @@ supabase/migrations/0002_rls_and_storage.sql  -- buckets and row-level security
 supabase/migrations/0003_space_operator.sql   -- operator per suite, not per tower
 supabase/migrations/0004_anon_access.sql      -- browser access before login exists
 supabase/migrations/0005_three_categories.sql -- fold co-working into managed
+supabase/migrations/0006_auth_and_roles.sql   -- sign-in, roles, permissions
 ```
+
+`0006` replaces the open `anon` access from `0004`. Until you run it the app has no
+sign-in at all and every screen is open to anyone who can reach it — the User Access
+screen and a badge in the header both say so.
 
 ### 2. Credentials
 
@@ -78,9 +84,76 @@ Or `npm run dev:all` to start both at once.
 
 ---
 
+## Signing in and user access
+
+### The first administrator
+
+When `0006` has run and the `profiles` table is empty, the backend creates one account on
+startup and prints it:
+
+```
+admin@gmail.com  /  admin123
+```
+
+That is the only account that is ever created automatically, and only into a database with
+no users at all — it can never overwrite or resurrect a real one. **Change the password from
+User Access as soon as you have signed in**, or set `SEED_ADMIN_EMAIL` and
+`SEED_ADMIN_PASSWORD` in `backend/.env` before the first start.
+
+Everyone else is created by an administrator: **User Access → People → Add person**, with a
+name, an email, a temporary password and a role. There is no self-signup and no invitation
+email, because no mail server is configured.
+
+### Roles and permissions
+
+A role is a named set of permissions. Three are seeded:
+
+| Role | Holds |
+|---|---|
+| **Administrator** | Everything, including user management. Built in — cannot be edited or deleted. |
+| **Editor** | Read and edit supply, import workbooks, merge landlords, run intake, build proposals. No deleting, no user management. |
+| **Viewer** | Read-only: sees supply and proposals, changes nothing. |
+
+Create your own on **User Access → Roles**: name it, tick what it may do, save. The
+permissions are:
+
+| Permission | Lets someone |
+|---|---|
+| `supply.read` | See buildings, availability, photographs and contacts |
+| `supply.write` | Add and change them |
+| `supply.delete` | Permanently remove buildings and availability rows |
+| `supply.import` | Load a supply workbook |
+| `supply.merge` | Fold duplicate landlord records together |
+| `intake.run` | Upload landlord documents and run the pipeline |
+| `proposals.read` | See and download proposals |
+| `proposals.write` | Match a requirement and build one |
+| `users.manage` | Create users and define roles |
+
+Only `admin` holds the wildcard `*`, which covers permissions added by future features. A
+role you create cannot be given it: that would be a second all-powerful role which, being
+editable, could be scoped away.
+
+### What actually enforces this
+
+Three layers, and only the first two are security:
+
+1. **Row-level security in Postgres.** Every table policy calls `has_perm(...)`. A viewer
+   who opens the browser console and runs `supabase.from("buildings").delete()` is refused
+   by the database.
+2. **Permission guards on the FastAPI routes.** The backend holds the secret key and
+   bypasses RLS by design, so each route declares the permission it needs and verifies the
+   caller's Supabase token against the project key set.
+3. **Hidden controls in the UI.** A courtesy, so nobody is offered a button that will fail.
+
+The tool refuses to leave itself unadministrable: the last administrator cannot be deleted,
+deactivated or demoted, a built-in role cannot be edited, and a role still held by someone
+cannot be deleted.
+
+---
+
 ## Loading the data
 
-**Managed Office workbook** — Supply Database tab. Pick the category to tag the file as
+**Managed Office workbook** — Supply Inventory tab. Pick the category to tag the file as
 (it defaults to Managed), then use **Check without importing** first: that parses the
 whole workbook and reports what it would create without writing anything. The file is
 ~318 MB and almost entirely embedded photographs, so it is read from disk by path rather
@@ -92,7 +165,7 @@ photograph belongs to.
 Untick *Upload embedded photographs* for a fast, data-only import; the images account
 for roughly a third of Supabase's 1 GB free tier.
 
-**Landlord documents** — Extraction tab. Upload files under a landlord name, then run
+**Landlord documents** — Document Intake tab. Upload files under a landlord name, then run
 the pipeline. Documents are deduplicated by content hash, and older monthly editions of
 the same report are superseded automatically.
 
@@ -117,7 +190,7 @@ only on the size of the requirement that walks in the door:
 | fewer than 15 seats | Co-working |
 | 15 seats or more | Managed office |
 
-So the product name belongs to the *requirement*, and the Deck Builder applies it when the
+So the product name belongs to the *requirement*, and the Proposal Builder applies it when the
 proposal is written. Keeping it on the building made the two categories impossible to tell
 apart when editing — the same Table Space centre could be filed either way depending on who
 typed it in — and a co-working filter then hid managed stock that was equally available.
@@ -167,7 +240,7 @@ clean without losing the product line.
 
 ## Editing the data
 
-The Supply Database tab is the working surface:
+The Supply Inventory tab is the working surface:
 
 - **Category tabs** across the top filter to Conventional / Managed & Co-working / Sale,
   each with a live count.
@@ -184,7 +257,7 @@ The Supply Database tab is the working surface:
 
 ## Building a proposal
 
-The Deck Builder tab is one pass with a review step in the middle:
+The Proposal Builder tab is one pass with a review step in the middle:
 
 1. **Describe the requirement** in plain English. The model turns it into filters — micro-market,
    area or headcount, condition, budget, landlord — and those filters query the database.

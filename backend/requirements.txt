@@ -13,3 +13,8 @@ PyMuPDF==1.25.1
 python-pptx==1.0.2
 Pillow==11.1.0
 requests==2.32.3
+
+# Authentication (migration 0006). PyJWT verifies the Supabase access token
+# against the project key set; httpx is the fallback path via the Auth API.
+PyJWT==2.13.0
+cryptography==49.0.0
