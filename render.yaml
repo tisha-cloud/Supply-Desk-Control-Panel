@@ -1,0 +1,68 @@
+# Render blueprint for the FastAPI backend.
+#
+# Only the backend lives here. The Next.js app goes to Vercel, which is better
+# at it, and the two are joined by BACKEND_URL.
+#
+# To use: Render dashboard -> New -> Blueprint -> pick this repository. Render
+# reads this file, creates the service, and prompts for the values marked
+# sync:false below. None of them are stored in the repository.
+
+services:
+  - type: web
+    name: supply-desk-api
+    runtime: docker
+    plan: starter          # 512 MB. The free plan sleeps, and a cold start
+                           # drops in-flight import jobs, so it is not offered.
+    region: singapore      # Nearest to both Bengaluru and a Supabase ap-south
+                           # project; keeps the round trip per query short.
+
+    # The build context is the repository root, because the backend imports
+    # master_extract and extractor.* from extraction/ and ai_client and
+    # ppt_generator from LLM/. See control-panel/backend/Dockerfile.
+    dockerfilePath: ./control-panel/backend/Dockerfile
+    dockerContext: .
+
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    # A workbook import writes into a working directory. Without a disk it is
+    # lost on every deploy, which is survivable (uploads are re-runnable) but
+    # noisy; 1 GB keeps a run intact across restarts.
+    disk:
+      name: work
+      mountPath: /app/control-panel/backend/.work
+      sizeGB: 1
+
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY       # bypasses row-level security
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY  # used only to validate access tokens
+        sync: false
+      - key: GEMINI_API_KEY            # extraction; remove when Claude lands
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # The first administrator, created only into an empty profiles table.
+      # Set a real password here rather than shipping with admin123.
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+
+      # Your Vercel domain, comma-separated. The browser normally reaches this
+      # service through the Next.js proxy, so CORS matters only if something
+      # calls it directly.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      - key: BACKEND_HOST
+        value: 0.0.0.0
+      - key: BACKEND_PORT
+        value: "8000"
+      # One worker: job progress is held in an in-process dict, so a second
+      # worker would answer job polls that know nothing about the running job.
+      - key: WEB_CONCURRENCY
+        value: "1"

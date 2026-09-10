@@ -80,6 +80,10 @@ BUCKET_SOURCES = "source-files"
 HOST = os.getenv("BACKEND_HOST", "127.0.0.1").strip()
 PORT = int(os.getenv("BACKEND_PORT", "8000"))
 
+# Hot reload. Development only - a file touch restarts the worker and kills any
+# in-flight import mid-write. Deployments leave this unset.
+RELOAD = os.getenv("BACKEND_RELOAD", "").strip().lower() in ("1", "true", "yes")
+
 # ---------------------------------------------------------------------- misc
 ALLOWED_ORIGINS = [
     o.strip() for o in

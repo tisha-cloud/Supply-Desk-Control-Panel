@@ -440,4 +440,8 @@ def bootstrap_first_admin():
 if __name__ == "__main__":
     import uvicorn
     print("Backend on http://%s:%d" % (config.HOST, config.PORT))
-    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=True)
+    # Reload is a development convenience and a production hazard: touching a
+    # file restarts the worker, killing any in-flight import or extraction job
+    # after replace_spaces has already deleted rows. Off unless asked for.
+    uvicorn.run("main:app", host=config.HOST, port=config.PORT,
+                reload=config.RELOAD)

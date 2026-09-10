@@ -1,0 +1,32 @@
+# The build context is the repository root, so keep the heavy and the secret
+# out of it. Everything here would otherwise be uploaded to the builder.
+
+.git/
+**/.git-nested-backup/
+
+# Landlord documents and source workbooks: hundreds of MB, client-confidential,
+# and read from Supabase Storage at runtime rather than from the image.
+extraction/BLR_Builders_Developers_Supply/
+**/*.xlsx
+**/*.xls
+!LLM/templates/*
+LLM/generated_decks/
+control-panel/backend/.work/
+
+# Secrets are supplied as environment variables by the host, never baked in.
+**/.env
+**/.env.*
+!**/.env.example
+
+# The frontend is built by Vercel, not by this image.
+control-panel/node_modules/
+control-panel/.next/
+control-panel/out/
+
+# Caches
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.llm_cache/
+**/venv/
+**/.venv/
