@@ -51,6 +51,23 @@ def _log(job_id: str, line: str) -> None:
 
 
 # ============================================================ health / config
+@app.get("/")
+def root():
+    """
+    What this service is, for anyone who opens the base URL.
+
+    A managed host probes / when it starts a service, and an operator checking
+    a deployment tries it first. Answering 404 to both is needlessly confusing
+    when a sentence will do.
+    """
+    return {
+        "service": "Bangalore Supply Desk API",
+        "docs": "/docs",
+        "health": "/api/health",
+        "note": "The web app is a separate deployment; this is only its backend.",
+    }
+
+
 @app.get("/api/health")
 def health():
     from ai_client import AIClient
