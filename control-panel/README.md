@@ -50,9 +50,13 @@ screen and a badge in the header both say so.
 Two files, because the browser and the backend use different keys.
 
 ```bash
-cp .env.local.example .env.local          # NEXT_PUBLIC_SUPABASE_URL + publishable key
-cp backend/.env.example backend/.env      # SUPABASE_URL + secret key
+cp .env.local.example .env.local             # NEXT_PUBLIC_SUPABASE_URL + publishable key
+cp ../backend/.env.example ../backend/.env   # SUPABASE_URL + secret key
 ```
+
+The backend lives at `../backend`, beside this directory rather than inside it: Vercel
+builds the Next.js app from here, and treats any `main.py` plus `requirements.txt` beneath
+its root as a second application to deploy.
 
 Supabase is midway through renaming its keys, and both naming schemes are accepted:
 
@@ -71,7 +75,7 @@ repeating.
 
 ```bash
 # Terminal 1 - backend
-cd backend
+cd ../backend
 pip install -r requirements.txt
 python main.py                     # http://127.0.0.1:8000
 

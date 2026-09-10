@@ -5,7 +5,7 @@ Two hosts, because the two halves have genuinely different needs.
 | Half | Host | Why |
 |---|---|---|
 | Next.js app (`control-panel/`) | **Vercel** | It is a Next.js app; Vercel builds and serves it with no configuration. |
-| FastAPI backend (`control-panel/backend/`) | **Render** (or Railway / Fly) | Long-running jobs, ~400 MB of native dependencies, and a writable disk. None of that fits a serverless function. |
+| FastAPI backend (`backend/`) | **Render** (or Railway / Fly) | Long-running jobs, ~400 MB of native dependencies, and a writable disk. None of that fits a serverless function. |
 
 ## Why not Vercel alone
 
@@ -49,7 +49,7 @@ supply data and your client-facing templates.
 ## 2. Backend on Render
 
 **New → Blueprint → pick this repository.** Render reads `render.yaml`, builds
-`control-panel/backend/Dockerfile` with the repository root as its context, and prompts
+`backend/Dockerfile` with the repository root as its context, and prompts
 for the values below. Alternatively, **New → Web Service → Docker** and set the Dockerfile
 path by hand.
 
@@ -84,7 +84,7 @@ start during an import kills the job after `replace_spaces` has already deleted 
 
 Importing the repository, Vercel scans it and may offer **two** applications: the Next.js
 frontend at `/`, and a FastAPI backend at `/api/backend` that it infers from
-`control-panel/backend/`. **Deploy only the frontend.**
+`backend/`. **Deploy only the frontend.**
 
 `/api/backend` is already a Next.js route handler - the proxy that reads the caller session
 from cookies and attaches it as a bearer token. A FastAPI deployment winning that path
@@ -179,7 +179,7 @@ Honest list of what does not yet work once hosted, none of which blocks day-to-d
 Unchanged:
 
 ```bash
-cd control-panel/backend && python main.py     # BACKEND_RELOAD=1 for hot reload
+cd backend && python main.py     # BACKEND_RELOAD=1 for hot reload
 cd control-panel && npm run dev
 ```
 

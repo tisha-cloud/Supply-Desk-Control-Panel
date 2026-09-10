@@ -2,10 +2,10 @@
 #
 # Build from the REPOSITORY ROOT, not from this directory:
 #
-#     docker build -f control-panel/backend/Dockerfile -t supply-desk-api .
+#     docker build -f backend/Dockerfile -t supply-desk-api .
 #
-# config.py puts ../../extraction and ../../LLM on sys.path, so the image keeps
-# the same three-directory layout the checkout has. Copying the backend alone
+# config.py puts ../extraction and ../LLM on sys.path, so the image keeps
+# the same directory layout the checkout has. Copying the backend alone
 # would produce a container that fails at import: main.py needs ai_client from
 # LLM/, extraction_service needs master_extract and extractor.* from
 # extraction/, and the deck generator needs the .pptx template.
@@ -25,8 +25,8 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Dependencies first: this layer is rebuilt only when requirements change.
-COPY control-panel/backend/requirements.txt ./control-panel/backend/requirements.txt
-RUN pip install --no-cache-dir -r control-panel/backend/requirements.txt \
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt \
  && pip install --no-cache-dir "gunicorn==23.0.0"
 
 # The two sibling projects. Their heavy inputs - landlord documents, source
@@ -34,9 +34,9 @@ RUN pip install --no-cache-dir -r control-panel/backend/requirements.txt \
 # the code and the .pptx template do.
 COPY LLM/ ./LLM/
 COPY extraction/ ./extraction/
-COPY control-panel/backend/ ./control-panel/backend/
+COPY backend/ ./backend/
 
-WORKDIR /app/control-panel/backend
+WORKDIR /app/backend
 
 # 0.0.0.0 because 127.0.0.1 inside a container is unreachable from outside it.
 # One worker: job progress lives in an in-process dict, so a second worker

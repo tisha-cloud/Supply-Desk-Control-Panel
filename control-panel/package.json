@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "dev:all": "concurrently -n backend,web -c cyan,magenta \"npm run dev:backend\" \"next dev\"",
-    "dev:backend": "python backend/main.py"
+    "dev:backend": "python ../backend/main.py"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

@@ -18,7 +18,7 @@ export function SetupNotice() {
           the browser and governed by row-level security).
         </li>
         <li>
-          <code>control-panel/backend/.env</code> — <code>SUPABASE_URL</code> and{" "}
+          <code>backend/.env</code> — <code>SUPABASE_URL</code> and{" "}
           <code>SUPABASE_SECRET_KEY</code>. The secret key bypasses RLS, so it stays
           server-side only.
         </li>

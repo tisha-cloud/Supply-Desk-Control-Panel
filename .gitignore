@@ -19,7 +19,7 @@ next-env.d.ts
 .vercel/
 
 # Backend scratch space: uploads and generated decks, recreated at runtime.
-control-panel/backend/.work/
+backend/.work/
 
 # Caches and build artefacts
 .llm_cache/

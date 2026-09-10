@@ -18,8 +18,8 @@ services:
 
     # The build context is the repository root, because the backend imports
     # master_extract and extractor.* from extraction/ and ai_client and
-    # ppt_generator from LLM/. See control-panel/backend/Dockerfile.
-    dockerfilePath: ./control-panel/backend/Dockerfile
+    # ppt_generator from LLM/. See backend/Dockerfile.
+    dockerfilePath: ./backend/Dockerfile
     dockerContext: .
 
     healthCheckPath: /api/health
@@ -33,7 +33,7 @@ services:
     # blueprint that asks for a disk on a free instance will not deploy.
     disk:
       name: work
-      mountPath: /app/control-panel/backend/.work
+      mountPath: /app/backend/.work
       sizeGB: 1
 
     envVars:

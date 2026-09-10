@@ -67,7 +67,7 @@ async function proxy(request: NextRequest, path: string[]) {
           "call. Set it in Vercel to the URL of the FastAPI service (for example " +
           "https://supply-desk-api.onrender.com, no trailing slash) and redeploy."
         : `Cannot reach the backend at ${BACKEND_URL}. ` +
-          `Start it with:  cd control-panel/backend && python main.py`;
+          `Start it with:  cd backend && python main.py`;
     return Response.json({ detail }, { status: 503 });
   }
 }

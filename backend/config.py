@@ -3,9 +3,15 @@ Backend configuration and the sys.path wiring that lets this service reuse the
 existing extraction and deck-generation code without copying it.
 
 The two Python projects already living in this repo stay where they are:
-    ../../extraction   the landlord-document pipeline (PyMuPDF colour reading,
-                       Gemini client, occupancy derivation)
-    ../../LLM          the PPTX generator that clones 'options format.pptx'
+    ../extraction   the landlord-document pipeline (PyMuPDF colour reading,
+                    Gemini client, occupancy derivation)
+    ../LLM          the PPTX generator that clones 'options format.pptx'
+
+This directory sits beside control-panel/ rather than inside it. Vercel builds
+the Next.js app from control-panel/, and it detects any main.py plus
+requirements.txt under that root as a second application to deploy - one that
+would claim /api/backend, the path of the proxy route that attaches the caller
+session. Keeping the Python out of that tree removes the ambiguity entirely.
 """
 import os
 import sys
@@ -13,8 +19,8 @@ import sys
 from dotenv import load_dotenv
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-CONTROL_PANEL_DIR = os.path.dirname(BACKEND_DIR)
-PROJECT_ROOT = os.path.dirname(CONTROL_PANEL_DIR)
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+CONTROL_PANEL_DIR = os.path.join(PROJECT_ROOT, "control-panel")
 
 EXTRACTION_DIR = os.path.join(PROJECT_ROOT, "extraction")
 LLM_DIR = os.path.join(PROJECT_ROOT, "LLM")

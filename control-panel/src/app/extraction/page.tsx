@@ -118,7 +118,7 @@ export default function ExtractionPage() {
         <div className="mb-6">
           <Callout tone="warning" title="Supabase is not configured on the backend">
             Extraction publishes straight to the database, so it will refuse to start until{" "}
-            <code>control-panel/backend/.env</code> has your secret key.
+            <code>backend/.env</code> has your secret key.
           </Callout>
         </div>
       ) : null}

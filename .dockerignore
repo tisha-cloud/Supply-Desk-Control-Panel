@@ -11,7 +11,7 @@ extraction/BLR_Builders_Developers_Supply/
 **/*.xls
 !LLM/templates/*
 LLM/generated_decks/
-control-panel/backend/.work/
+backend/.work/
 
 # Secrets are supplied as environment variables by the host, never baked in.
 **/.env
