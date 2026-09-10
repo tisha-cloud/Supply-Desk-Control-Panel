@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, LogIn } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -13,8 +13,28 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null while unknown. False means migration 0006 has not been run, so there
+  // are no accounts and no password can possibly work - worth saying plainly
+  // rather than letting someone guess at a form that cannot succeed.
+  const [authReady, setAuthReady] = useState<boolean | null>(null);
 
   const configured = isSupabaseConfigured();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/backend/api/access/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((status) => {
+        if (!cancelled && status) setAuthReady(Boolean(status.auth_ready));
+      })
+      .catch(() => {
+        /* the backend being unreachable does not stop anyone signing in:
+           the form below talks to Supabase directly. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -123,9 +143,18 @@ function LoginForm() {
               {busy ? "Signing in…" : "Sign in"}
             </button>
 
-            <p className="text-center text-xs text-ink-3">
-              Accounts are created by an administrator from the User Access screen.
-            </p>
+            {authReady === false ? (
+              <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
+                No accounts exist yet: migration{" "}
+                <code>0006_auth_and_roles.sql</code> has not been run against this database.
+                Run it in the Supabase SQL editor and restart the backend, which then creates
+                the first administrator.
+              </p>
+            ) : (
+              <p className="text-center text-xs text-ink-3">
+                Accounts are created by an administrator from the User Access screen.
+              </p>
+            )}
           </form>
         )}
       </div>

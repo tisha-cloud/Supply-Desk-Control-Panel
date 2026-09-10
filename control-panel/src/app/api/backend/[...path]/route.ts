@@ -15,10 +15,19 @@ import { accessToken } from "@/lib/supabase/server";
  * link work: a browser navigation sends cookies but never an Authorization
  * header.
  */
+// Localhost is the right default for development and a useless one in a
+// deployment: unset on Vercel, every call would fail against a loopback
+// address that has no backend, and the error would blame the network rather
+// than the missing setting. `configured` distinguishes the two below.
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+const CONFIGURED = Boolean(process.env.BACKEND_URL);
+const ON_VERCEL = Boolean(process.env.VERCEL);
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// 60s is the ceiling on Vercel's Hobby plan; asking for more fails the build.
+// It has to cover a cold start on the backend host, which on a free Render
+// instance can take most of a minute on its own. Pro allows up to 300.
+export const maxDuration = 60;
 
 async function proxy(request: NextRequest, path: string[]) {
   const target = `${BACKEND_URL}/${path.join("/")}${request.nextUrl.search}`;
@@ -52,14 +61,14 @@ async function proxy(request: NextRequest, path: string[]) {
       },
     });
   } catch {
-    return Response.json(
-      {
-        detail:
-          `Cannot reach the extraction backend at ${BACKEND_URL}. ` +
-          `Start it with:  cd control-panel/backend && python main.py`,
-      },
-      { status: 503 },
-    );
+    const detail =
+      ON_VERCEL && !CONFIGURED
+        ? "BACKEND_URL is not set on this deployment, so there is no backend to " +
+          "call. Set it in Vercel to the URL of the FastAPI service (for example " +
+          "https://supply-desk-api.onrender.com, no trailing slash) and redeploy."
+        : `Cannot reach the backend at ${BACKEND_URL}. ` +
+          `Start it with:  cd control-panel/backend && python main.py`;
+    return Response.json({ detail }, { status: 503 });
   }
 }
 

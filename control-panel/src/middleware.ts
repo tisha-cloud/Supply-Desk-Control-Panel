@@ -22,48 +22,28 @@ const SUPABASE_KEY =
 /** Reachable without a session. */
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
-
 /**
- * Whether authentication is switched on, cached between requests.
+ * The one-time escape hatch for a database that has no accounts yet.
  *
- * This exists to avoid a lockout: before migration 0006 there are no accounts
- * at all, so redirecting to /login would leave the operator staring at a form
- * that nobody can satisfy. Until the backend reports the schema is present,
- * the gate stays open.
+ * Before migration 0006 there are no users, so the gate below would strand the
+ * operator at a form nobody can satisfy. Setting AUTH_SETUP_MODE=1 opens the
+ * app until the migration has been run, and it must then be removed.
  *
- * Once it has reported ready, that is remembered permanently. A backend that
- * later goes down must not become a way to switch the gate back off.
+ * This used to be decided by asking the backend on each cold start. That was
+ * wrong in a way that only showed up once deployed: the probe treated an
+ * unreachable backend as "authentication is not set up", so a serverless
+ * instance that could not reach a sleeping backend within its timeout let
+ * everyone through. The default is now to enforce, and only an explicit,
+ * deliberate environment variable relaxes it.
  */
-let authEverReady = false;
-let checkedAt = 0;
-const CHECK_INTERVAL = 60_000;
-
-async function authIsEnabled(): Promise<boolean> {
-  if (authEverReady) return true;
-  if (Date.now() - checkedAt < CHECK_INTERVAL) return false;
-  checkedAt = Date.now();
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/access/status`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return false;
-    const status = await response.json();
-    if (status.auth_ready) authEverReady = true;
-  } catch {
-    // Backend unreachable during first setup. Stay open; row-level security
-    // still governs every piece of data behind these pages.
-  }
-  return authEverReady;
-}
+const SETUP_MODE = process.env.AUTH_SETUP_MODE === "1";
 
 export async function middleware(request: NextRequest) {
   // Without credentials there is nothing to sign in to; let the setup notice
   // on the page explain that rather than redirecting into a login that cannot
   // work either.
   if (!SUPABASE_URL || !SUPABASE_KEY) return NextResponse.next();
-  if (!(await authIsEnabled())) return NextResponse.next();
+  if (SETUP_MODE) return NextResponse.next();
 
   let response = NextResponse.next({ request });
 

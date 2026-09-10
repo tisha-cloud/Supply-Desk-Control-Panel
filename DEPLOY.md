@@ -30,7 +30,7 @@ The whole repository goes, not just `control-panel/`. The backend imports `maste
 and `extractor.*` from `extraction/`, and `ai_client` and `ppt_generator` from `LLM/`;
 publishing the control panel alone produces a service that fails at import.
 
-It is small: **113 files, about 10 MB.** The 465 MB of landlord documents and the 83 MB of
+It is small: **123 files, about 10 MB.** The 465 MB of landlord documents and the 83 MB of
 generated decks are gitignored and stay on your machine.
 
 ```bash
@@ -80,6 +80,20 @@ start during an import kills the job after `replace_spaces` has already deleted 
 | Framework | Next.js (detected) |
 | Build / install | defaults |
 
+### Deploy only the Next.js app
+
+Importing the repository, Vercel scans it and may offer **two** applications: the Next.js
+frontend at `/`, and a FastAPI backend at `/api/backend` that it infers from
+`control-panel/backend/`. **Deploy only the frontend.**
+
+`/api/backend` is already a Next.js route handler - the proxy that reads the caller session
+from cookies and attaches it as a bearer token. A FastAPI deployment winning that path
+would send every backend call out unauthenticated, which looks like a broken backend rather
+than a routing mistake.
+
+`control-panel/.vercelignore` hides `backend/` so it is not detected on a fresh import. If
+you are mid-import and both are already listed, remove the FastAPI one by hand.
+
 Environment variables:
 
 | Variable | Value |
@@ -93,7 +107,29 @@ directly; every call goes through `/api/backend/*`, which runs server-side, atta
 caller's Supabase token and forwards it. That is also what makes a plain download link
 work — a browser navigation sends cookies but never an `Authorization` header.
 
+If it is missing, the proxy says so by name rather than reporting an unreachable
+`127.0.0.1`.
+
+### Function timeout
+
+The proxy is capped at **60 seconds**, the Hobby ceiling — asking for more fails the build.
+It has to cover a cold start on the backend host, which on a free Render instance can take
+most of a minute by itself. On Pro, raise it to 300 in both `vercel.json` and the
+`maxDuration` export in `src/app/api/backend/[...path]/route.ts`; a workbook import needs
+the headroom.
+
 Then set `ALLOWED_ORIGINS` on Render to the Vercel domain and redeploy.
+
+### AUTH_SETUP_MODE
+
+Leave it unset. It exists only for a database where migration `0006` has not been run and
+which therefore has no accounts: without it the sign-in gate strands you at a form nobody
+can satisfy. Setting it to `1` opens every page to anyone who can reach the deployment.
+
+The gate defaults to enforcing and never asks the backend whether to. An earlier version
+probed the backend on each cold start and treated an unreachable one as "authentication is
+not set up" — so a serverless instance that could not reach a sleeping backend inside its
+timeout let everyone through.
 
 ---
 
