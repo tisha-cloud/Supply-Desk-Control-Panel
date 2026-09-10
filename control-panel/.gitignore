@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the templates that say what each .env needs are not secret, and the
+# README tells you to copy them. Without this they were silently untracked.
+!.env*.example
 
 # vercel
 .vercel
