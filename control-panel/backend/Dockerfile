@@ -41,21 +41,24 @@ WORKDIR /app/control-panel/backend
 # 0.0.0.0 because 127.0.0.1 inside a container is unreachable from outside it.
 # One worker: job progress lives in an in-process dict, so a second worker
 # would answer job polls that know nothing about the running job.
+# BACKEND_PORT is deliberately NOT set here. config.py prefers it over the
+# platform-assigned PORT, so baking it in would pin the service to 8000
+# while Render listens on the port it chose, and the health check would
+# never pass. Unset, PORT wins and 8000 is the fallback below.
 ENV BACKEND_HOST=0.0.0.0 \
-    BACKEND_PORT=8000 \
     WEB_CONCURRENCY=1
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" || exit 1
+  CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/api/health" || exit 1
 
 # Gunicorn for process supervision, uvicorn workers for ASGI. The long timeout
 # is deliberate: a workbook import holds its request open while it parses.
 CMD ["sh", "-c", "gunicorn main:app \
   --worker-class uvicorn.workers.UvicornWorker \
   --workers ${WEB_CONCURRENCY} \
-  --bind ${BACKEND_HOST}:${BACKEND_PORT} \
+  --bind ${BACKEND_HOST}:${PORT:-8000} \
   --timeout 600 \
   --graceful-timeout 30 \
   --access-logfile - \

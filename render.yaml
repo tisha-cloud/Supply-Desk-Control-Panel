@@ -28,6 +28,9 @@ services:
     # A workbook import writes into a working directory. Without a disk it is
     # lost on every deploy, which is survivable (uploads are re-runnable) but
     # noisy; 1 GB keeps a run intact across restarts.
+    #
+    # Disks require a paid plan. On the free plan, delete this block - a
+    # blueprint that asks for a disk on a free instance will not deploy.
     disk:
       name: work
       mountPath: /app/control-panel/backend/.work
@@ -60,8 +63,10 @@ services:
 
       - key: BACKEND_HOST
         value: 0.0.0.0
-      - key: BACKEND_PORT
-        value: "8000"
+      # BACKEND_PORT is deliberately NOT set. Render assigns the port through
+      # PORT, and config.py prefers BACKEND_PORT when present - so setting it
+      # here would bind the service to 8000 while Render listens elsewhere,
+      # and the deploy would fail its health check.
       # One worker: job progress is held in an in-process dict, so a second
       # worker would answer job polls that know nothing about the running job.
       - key: WEB_CONCURRENCY

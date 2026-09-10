@@ -19,6 +19,12 @@ PROJECT_ROOT = os.path.dirname(CONTROL_PANEL_DIR)
 EXTRACTION_DIR = os.path.join(PROJECT_ROOT, "extraction")
 LLM_DIR = os.path.join(PROJECT_ROOT, "LLM")
 
+# Captured before any .env is read. Render, Railway and Heroku inject PORT into
+# the real environment and expect the service to bind to it - but extraction/.env
+# also defines a PORT for its own standalone server, and that file is loaded
+# below. Reading the platform value first keeps the two from colliding.
+_PLATFORM_PORT = os.environ.get("PORT")
+
 # Load .env from the backend, then fall back to the extraction project's .env
 # so the Gemini key only has to be configured in one place.
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
@@ -78,7 +84,10 @@ BUCKET_SOURCES = "source-files"
 # Host/port the service binds to. Configurable because a crashed uvicorn can
 # leave port 8000 held by an unkillable process until the machine restarts.
 HOST = os.getenv("BACKEND_HOST", "127.0.0.1").strip()
-PORT = int(os.getenv("BACKEND_PORT", "8000"))
+# BACKEND_PORT wins when set explicitly; otherwise take whatever the host
+# assigned. A managed host picks the port, so ignoring it would bind the
+# service where the platform is not listening and the deploy would time out.
+PORT = int(os.getenv("BACKEND_PORT") or _PLATFORM_PORT or 8000)
 
 # Hot reload. Development only - a file touch restarts the worker and kills any
 # in-flight import mid-write. Deployments leave this unset.
