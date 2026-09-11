@@ -46,6 +46,10 @@ export default function DecksPage() {
   const [query, setQuery] = useState("");
   const [clientName, setClientName] = useState("");
   const [template, setTemplate] = useState("");
+  // Location slides, off by default: each one is a billed Google Maps call, so
+  // they are drawn when asked for rather than on every proposal.
+  const [overviewMap, setOverviewMap] = useState(false);
+  const [optionMaps, setOptionMaps] = useState(false);
   const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [chosen, setChosen] = useState<string[]>([]);
   const [outputs, setOutputs] = useState<Output[]>([]);
@@ -90,6 +94,9 @@ export default function DecksPage() {
         template_name: format === "pptx" ? template || null : null,
         building_ids: chosen,
         output_format: format,
+        // Maps live on slides, so they mean nothing in a spreadsheet.
+        overview_map: format === "pptx" && overviewMap,
+        option_maps: format === "pptx" && optionMaps,
       });
       // Replace any earlier file of the same format; keep the other one, so
       // making both a deck and a sheet leaves both links on screen.
@@ -451,6 +458,32 @@ export default function DecksPage() {
                     </>
                   )}
                 </p>
+                {health?.maps_configured ? (
+                  <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border bg-surface-2 px-3 py-2.5">
+                    <span className="text-sm font-medium">Location slides</span>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
+                      <input
+                        type="checkbox"
+                        checked={overviewMap}
+                        onChange={(e) => setOverviewMap(e.target.checked)}
+                      />
+                      One map of all {included.length} options
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
+                      <input
+                        type="checkbox"
+                        checked={optionMaps}
+                        onChange={(e) => setOptionMaps(e.target.checked)}
+                      />
+                      A map per option, with nearby metro, hotels and hospitals
+                    </label>
+                    <span className="w-full text-xs text-ink-3">
+                      PowerPoint only. Each map is a billed Google Maps call, cached
+                      afterwards, so rebuilding the same proposal costs nothing.
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="btn-primary"

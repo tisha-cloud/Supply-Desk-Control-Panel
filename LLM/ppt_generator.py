@@ -232,6 +232,91 @@ class PPTGenerator:
             return False
         return True
 
+    # ------------------------------------------------------------ location
+    # Geometry for a location slide, on a 13.33 x 7.5in canvas: title across
+    # the top, the map filling the left, a panel of detail down the right.
+    MAP_TITLE = (0.35, 0.22, 12.6, 0.62)
+    MAP_IMAGE = (0.35, 1.05, 7.75, 5.85)
+    MAP_PANEL = (8.35, 1.05, 4.60, 5.85)
+
+    def _blank_layout(self, prs):
+        """The emptiest layout the template offers, for a slide it has none of."""
+        layouts = list(prs.slide_masters[0].slide_layouts)
+        for layout in layouts:
+            if layout.name.strip().lower() == "blank":
+                return layout
+        return layouts[-1]
+
+    def add_location_slide(self, prs, title, image_bytes, panel_lines,
+                           subtitle=""):
+        """
+        Build a location slide: a map on the left, notes down the right.
+
+        The template ships no such slide, so this one is composed rather than
+        cloned. Returns the slide, or None when there is no map to show - a
+        deck is still a deck without one, and an empty frame reads as a bug.
+        """
+        if not image_bytes:
+            return None
+
+        slide = prs.slides.add_slide(self._blank_layout(prs))
+        for shape in list(slide.shapes):
+            shape.element.getparent().remove(shape.element)
+
+        left, top, width, height = self.MAP_TITLE
+        box = slide.shapes.add_textbox(Inches(left), Inches(top),
+                                       Inches(width), Inches(height))
+        frame = box.text_frame
+        frame.word_wrap = True
+        frame.text = title
+        head = frame.paragraphs[0]
+        head.font.size = Pt(20)
+        head.font.bold = True
+        head.font.name = "Segoe UI"
+        head.font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
+        if subtitle:
+            line = frame.add_paragraph()
+            line.text = subtitle
+            line.font.size = Pt(11)
+            line.font.name = "Segoe UI"
+            line.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+
+        left, top, width, height = self.MAP_IMAGE
+        try:
+            slide.shapes.add_picture(io.BytesIO(image_bytes), Inches(left),
+                                     Inches(top), width=Inches(width),
+                                     height=Inches(height))
+        except Exception:
+            return None
+
+        if panel_lines:
+            left, top, width, height = self.MAP_PANEL
+            panel = slide.shapes.add_textbox(Inches(left), Inches(top),
+                                             Inches(width), Inches(height))
+            frame = panel.text_frame
+            frame.word_wrap = True
+            first = True
+            for entry in panel_lines:
+                # A tuple is a heading and its detail; a bare string is a line.
+                heading, detail = entry if isinstance(entry, tuple) else ("", entry)
+                if heading:
+                    para = frame.paragraphs[0] if first else frame.add_paragraph()
+                    para.text = heading
+                    para.font.size = Pt(11)
+                    para.font.bold = True
+                    para.font.name = "Segoe UI"
+                    para.font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
+                    para.space_before = Pt(0 if first else 8)
+                    first = False
+                if detail:
+                    para = frame.paragraphs[0] if first else frame.add_paragraph()
+                    para.text = detail
+                    para.font.size = Pt(10)
+                    para.font.name = "Segoe UI"
+                    para.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+                    first = False
+        return slide
+
     def populate_option_slide(self, slide, rec, opt_num):
         """Populates Slide 10 option template with detailed property information."""
         prop_name = safe_str(rec.get('building_name', rec.get('property_name')), f'Option {opt_num}')
@@ -458,11 +543,20 @@ class PPTGenerator:
 
         return new_slide
 
-    def generate_presentation(self, matched_records, summary_data=None, client_name="Valued Client", 
-                              requirement_summary="Office Space Requirement", output_filename="Commercial_Options_Deck.pptx"):
+    def generate_presentation(self, matched_records, summary_data=None,
+                              client_name="Valued Client",
+                              requirement_summary="Office Space Requirement",
+                              output_filename="Commercial_Options_Deck.pptx",
+                              overview_map=None, option_maps=None):
         """
         Loads 'options format.pptx', preserves slides 1-8 unchanged, populates summary slide 9,
         populates option slides from slide 10 onwards, and moves closing slides 11-13 to the end.
+
+        `overview_map` is a prepared map of the whole shortlist; `option_maps`
+        maps an option number to its own. Both are optional and independent,
+        because which belongs in a proposal is the operator decision rather
+        than a rule - options clustered in one market argue for the overview,
+        a single option in an unfamiliar area for its own slide.
         """
         prs = pptx.Presentation(self.template_path)
         
@@ -523,11 +617,42 @@ class PPTGenerator:
         for idx, (sl, rec) in enumerate(zip(option_slides, matched_records), start=1):
             self.populate_option_slide(sl, rec, idx)
 
+        # ---- location slides -------------------------------------------------
+        # The overview follows the summary, so a client sees where the options
+        # are before reading them one by one. An option map follows its own
+        # slide, which is the only place it means anything.
+        overview_els = []
+        if overview_map:
+            made = self.add_location_slide(
+                prs, overview_map.get("title") or "Location overview",
+                overview_map.get("image"), overview_map.get("lines") or [],
+                overview_map.get("subtitle") or "")
+            if made is not None:
+                overview_els.append(list(id_list)[-1])
+
+        option_map_els = {}
+        for index in range(1, len(matched_records) + 1):
+            prepared = (option_maps or {}).get(index)
+            if not prepared:
+                continue
+            made = self.add_location_slide(
+                prs, prepared.get("title") or "Location",
+                prepared.get("image"), prepared.get("lines") or [],
+                prepared.get("subtitle") or "")
+            if made is not None:
+                option_map_els[index] = list(id_list)[-1]
+
         # ---- put the deck back in reading order ------------------------------
         # Cloning appends, so summaries and options are interleaved at the end
         # until they are reordered. Rebuilding the whole list is clearer than
         # moving elements one at a time, and it keeps the closing slides last.
-        desired = intro_els + summary_els + option_els + closing_els
+        interleaved = []
+        for position, element in enumerate(option_els, start=1):
+            interleaved.append(element)
+            if position in option_map_els:
+                interleaved.append(option_map_els[position])
+
+        desired = intro_els + summary_els + overview_els + interleaved + closing_els
         for el in list(id_list):
             id_list.remove(el)
         for el in desired:

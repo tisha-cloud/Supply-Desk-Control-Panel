@@ -5,6 +5,7 @@ These build a real .pptx from the real template, because every defect they
 cover was invisible in the object model and only showed up in the saved file.
 """
 import hashlib
+import io
 import os
 import sys
 import tempfile
@@ -154,3 +155,84 @@ class TestPhotographPlacement:
         prs = Presentation(generator.template_path)
         assert generator.place_photo(
             prs.slides[9], "https://127.0.0.1:9/does-not-exist.jpg") is False
+
+
+def _png(colour=(220, 230, 240)):
+    """A real PNG, standing in for a Google map."""
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (640, 480), colour).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _titles(prs):
+    """The first line of text on each slide, in slide order."""
+    out = []
+    for slide in prs.slides:
+        texts = [sh.text_frame.text.strip().splitlines()[0]
+                 for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        out.append(texts[0] if texts else "")
+    return out
+
+
+class TestLocationSlides:
+    """
+    Both placements are offered because which one helps depends on the
+    shortlist, and the operator picks. Neither is drawn unless asked for.
+    """
+
+    def test_nothing_is_added_when_neither_is_asked_for(self):
+        _, plain, _ = build(4, "test_maps_off.pptx")
+        generator = PPTGenerator(template_name="options format.pptx")
+        with_maps = Presentation(generator.generate_presentation(
+            matched_records=records(4), output_filename="test_maps_off2.pptx",
+            overview_map=None, option_maps=None))
+        assert len(with_maps.slides) == len(plain.slides)
+
+    def test_the_overview_follows_the_summary(self):
+        generator = PPTGenerator(template_name="options format.pptx")
+        prs = Presentation(generator.generate_presentation(
+            matched_records=records(3), output_filename="test_maps_overview.pptx",
+            overview_map={"title": "Where the options are", "image": _png(),
+                          "lines": [("Key", ""), ("1 - Building 01", "")]}))
+        titles = _titles(prs)
+        assert "Where the options are" in titles
+        # Slide 9 is the summary, so the overview is the tenth.
+        assert titles[9] == "Where the options are"
+
+    def test_each_option_map_follows_its_own_slide(self):
+        generator = PPTGenerator(template_name="options format.pptx")
+        prs = Presentation(generator.generate_presentation(
+            matched_records=records(3), output_filename="test_maps_per_option.pptx",
+            option_maps={n: {"title": "Location %d" % n, "image": _png(),
+                             "lines": ["Metro: Somewhere (500 m)"]}
+                         for n in (1, 2, 3)}))
+        titles = _titles(prs)
+        for n in (1, 2, 3):
+            option_at = next(i for i, t in enumerate(titles)
+                             if t.startswith("Option") and t.rstrip().endswith(str(n)))
+            assert titles[option_at + 1] == "Location %d" % n
+
+    def test_an_option_with_no_map_does_not_shift_the_others(self):
+        """
+        A building with no coordinates is skipped rather than guessed at, and
+        the options around it keep their pairing.
+        """
+        generator = PPTGenerator(template_name="options format.pptx")
+        prs = Presentation(generator.generate_presentation(
+            matched_records=records(3), output_filename="test_maps_gap.pptx",
+            option_maps={2: {"title": "Location 2", "image": _png(),
+                             "lines": ["Metro: Somewhere (500 m)"]}}))
+        titles = _titles(prs)
+        assert titles.count("Location 2") == 1
+        at = titles.index("Location 2")
+        assert titles[at - 1].startswith("Option")
+
+    def test_a_map_that_could_not_be_drawn_adds_no_empty_slide(self):
+        """An empty map frame reads as a bug; no slide reads as no map."""
+        generator = PPTGenerator(template_name="options format.pptx")
+        prs = Presentation(generator.generate_presentation(
+            matched_records=records(2), output_filename="test_maps_missing.pptx",
+            overview_map={"title": "Where", "image": None, "lines": []}))
+        assert "Where" not in _titles(prs)

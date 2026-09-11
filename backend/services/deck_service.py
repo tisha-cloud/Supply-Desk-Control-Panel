@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 import config
 import db
 
-from services import categories
+from services import categories, maps
 
 from ai_client import AIClient  # from ../../LLM
 
@@ -485,11 +485,66 @@ def to_option_records(buildings: List[Dict[str, Any]],
 OUTPUT_FORMATS = ("pptx", "xlsx")
 
 
+def prepare_maps(records: List[Dict[str, Any]], criteria: Dict[str, Any],
+                 overview: bool, per_option: bool) -> Dict[str, Any]:
+    """
+    Build whatever map slides were asked for, or nothing at all.
+
+    Both are optional and both cost money per call, so neither is drawn unless
+    it was ticked. Without a Google key this returns nothing and the deck is
+    built without map slides rather than failing - a proposal is still a
+    proposal without a map.
+    """
+    prepared: Dict[str, Any] = {"overview": None, "options": {}}
+    if not (overview or per_option) or not config.maps_configured():
+        return prepared
+
+    points = maps.option_points(records)
+    if not points:
+        return prepared
+
+    if overview:
+        image = maps.static_map(points, size=(640, 480))
+        if image:
+            # A pin reading "A" means nothing without the key beside it.
+            key = [("%s - %s" % (p["label"], p["name"]), "") for p in points]
+            prepared["overview"] = {
+                "title": "Where the options are",
+                "subtitle": "%d option%s across %s" % (
+                    len(points), "" if len(points) == 1 else "s",
+                    ", ".join(sorted({r.get("micromarket_category") or ""
+                                      for r in records} - {""})) or "Bengaluru"),
+                "image": image,
+                "lines": [("Key", "")] + key,
+            }
+
+    if per_option:
+        for point in points:
+            image = maps.static_map([{**point, "label": ""}], size=(640, 480), zoom=15)
+            if not image:
+                continue
+            record = records[point["option"] - 1]
+            lines: List[Any] = [("Address", record.get("address_location") or "")]
+            described = maps.describe_nearby(maps.nearby(point["lat"], point["lng"]))
+            if described:
+                lines.append(("What is nearby", ""))
+                lines += described
+            prepared["options"][point["option"]] = {
+                "title": "Option %d - %s" % (point["option"], point["name"]),
+                "subtitle": record.get("micromarket_category") or "",
+                "image": image,
+                "lines": lines,
+            }
+    return prepared
+
+
 def generate(query: str, client_name: str = "Valued Client",
              template_name: Optional[str] = None,
              deck_id: Optional[str] = None,
              building_ids: Optional[List[str]] = None,
-             output_format: str = "pptx") -> Dict[str, Any]:
+             output_format: str = "pptx",
+             overview_map: bool = False,
+             option_maps: bool = False) -> Dict[str, Any]:
     """
     Full path: prompt -> criteria -> shortlist -> .pptx or .xlsx on disk.
 
@@ -547,12 +602,15 @@ def generate(query: str, client_name: str = "Valued Client",
     generator = PPTGenerator(template_name=template_name or "options format.pptx")
 
     # generate_presentation writes into LLM/generated_decks and returns that path.
+    prepared = prepare_maps(records, criteria, overview_map, option_maps)
     produced = generator.generate_presentation(
         matched_records=records,
         summary_data=summarise(records),
         client_name=client_name,
         requirement_summary=criteria.get("title") or query,
         output_filename=filename,
+        overview_map=prepared["overview"],
+        option_maps=prepared["options"],
     )
 
     # Keep every deck this service made under the backend's own work directory.
@@ -569,6 +627,8 @@ def generate(query: str, client_name: str = "Valued Client",
         "path": out_path,
         "filename": filename,
         "format": "pptx",
+        "maps": {"overview": bool(prepared["overview"]),
+                 "options": len(prepared["options"])},
         "criteria": criteria,
         "building_ids": [b["id"] for b in buildings],
         "options": len(records),

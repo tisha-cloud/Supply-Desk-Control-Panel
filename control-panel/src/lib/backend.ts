@@ -51,6 +51,8 @@ export interface HealthResponse {
   /** False until migration 0006 has been run: every route is open until then. */
   auth_ready?: boolean;
   llm_provider: string;
+  /** False when no Google Maps key is set: location slides cannot be drawn. */
+  maps_configured?: boolean;
   supply_dir: string;
   supply_dir_exists: boolean;
   templates: string[];
@@ -169,11 +171,14 @@ export const backend = {
     template_name?: string | null;
     building_ids?: string[];
     output_format?: DeckFormat;
+    overview_map?: boolean;
+    option_maps?: boolean;
   }) =>
     request<{
       deck_id: string | null;
       filename: string;
       format: DeckFormat;
+      maps?: { overview: boolean; options: number } | null;
       options: number;
       criteria: Record<string, unknown>;
       building_ids: string[];

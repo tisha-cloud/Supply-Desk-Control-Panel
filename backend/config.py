@@ -83,6 +83,20 @@ SUPABASE_JWKS_URL = (
 SEED_ADMIN_EMAIL = os.getenv("SEED_ADMIN_EMAIL", "admin@gmail.com").strip()
 SEED_ADMIN_PASSWORD = os.getenv("SEED_ADMIN_PASSWORD", "admin123")
 
+# Google Maps. Static Maps draws the location slides; Places finds what is
+# around each building. Both are optional - without a key the deck simply has
+# no map slides rather than failing - and both are billed per call, so every
+# response is cached under MAP_CACHE_DIR and a rebuilt deck costs nothing.
+GOOGLE_MAPS_API_KEY = (os.getenv("GOOGLE_MAPS_API_KEY")
+                       or os.getenv("GOOGLE_API_KEY") or "").strip()
+MAP_CACHE_DIR = os.path.join(WORK_DIR, "maps")
+os.makedirs(MAP_CACHE_DIR, exist_ok=True)
+
+
+def maps_configured() -> bool:
+    return bool(GOOGLE_MAPS_API_KEY)
+
+
 BUCKET_IMAGES = "building-images"
 BUCKET_DECKS = "decks"
 BUCKET_SOURCES = "source-files"

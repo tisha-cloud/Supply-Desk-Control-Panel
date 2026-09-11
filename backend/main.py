@@ -94,6 +94,10 @@ def health():
         # UI shows a banner rather than letting that pass unnoticed.
         "auth_ready": auth.auth_schema_ready(),
         "llm_provider": provider,
+        # False when no Google Maps key is set. The deck builder hides the
+        # location-slide options rather than offering something that would
+        # quietly produce nothing.
+        "maps_configured": config.maps_configured(),
         "supply_dir": config.SUPPLY_DIR,
         "supply_dir_exists": os.path.isdir(config.SUPPLY_DIR),
         "templates": sorted(os.listdir(config.TEMPLATES_DIR))
@@ -306,6 +310,12 @@ class DeckRequest(BaseModel):
     # "pptx" for the client-facing proposal, "xlsx" for the same options as a
     # grid. Both are built from one shortlist.
     output_format: str = "pptx"
+    # Location slides, chosen per proposal because which one helps depends on
+    # the shortlist: options clustered in one market argue for the overview, a
+    # single option in an unfamiliar area for its own slide. Both cost a Google
+    # Maps call, so neither is drawn unless asked for.
+    overview_map: bool = False
+    option_maps: bool = False
 
 
 DECK_MEDIA_TYPES = {
@@ -328,6 +338,8 @@ def generate_deck(request: DeckRequest):
             template_name=request.template_name,
             building_ids=request.building_ids or None,
             output_format=request.output_format or "pptx",
+            overview_map=bool(request.overview_map),
+            option_maps=bool(request.option_maps),
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc))
@@ -361,6 +373,7 @@ def generate_deck(request: DeckRequest):
         "deck_id": deck_id,
         "filename": result["filename"],
         "format": result.get("format", "pptx"),
+        "maps": result.get("maps"),
         "options": result["options"],
         "criteria": result["criteria"],
         "building_ids": result["building_ids"],
