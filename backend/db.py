@@ -45,8 +45,18 @@ def slugify(text: str) -> str:
 
 
 def _clean(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Drop None values so a partial update never blanks an existing column."""
-    return {k: v for k, v in record.items() if v is not None}
+    """
+    Drop values that mean "not found", so a re-import enriches rather than erases.
+
+    None was already dropped, but the extractor fills its columns with empty
+    strings rather than leaving them absent - so a second pass over a document
+    that happened not to mention the power rating would have written "" over a
+    figure somebody had recorded by hand. An empty string is never a fact worth
+    keeping; clearing a field deliberately is done from the building editor,
+    which writes to Supabase directly and does not come through here.
+    """
+    return {k: v for k, v in record.items()
+            if v is not None and not (isinstance(v, str) and not v.strip())}
 
 
 # --------------------------------------------------------------- reference data

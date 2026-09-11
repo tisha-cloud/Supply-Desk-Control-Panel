@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 import db
+from services import categories
 
 # these resolve because config.py put ../../extraction on sys.path
 import master_extract as mx                       # noqa: E402
@@ -134,6 +135,9 @@ def _publish_buildings(item: Dict[str, Any], buildings: List[Dict[str, Any]],
     developer_name = item.get("developer") or ""
     developer_id = db.ensure_organisation(developer_name, "developer")
 
+    # Read once per document rather than once per building in it.
+    declared = {item.get("folder", ""): declared_category(item.get("folder", ""))}
+
     for building in buildings:
         try:
             built, diagnostics = rowbuilder.build_building_rows(
@@ -155,6 +159,10 @@ def _publish_buildings(item: Dict[str, Any], buildings: List[Dict[str, Any]],
             supply = "managed"
         elif head.get("_asset_type") not in ("office", "mixed"):
             supply = "other"
+        # What the operator declared at upload beats what the document implies.
+        # The guess above reads a transaction type out of prose; somebody who
+        # opened the file and chose a category knows.
+        supply = declared.get(item.get("folder", "")) or supply
 
         try:
             building_id = db.upsert_building({
@@ -217,15 +225,41 @@ def _publish_buildings(item: Dict[str, Any], buildings: List[Dict[str, Any]],
     return written
 
 
-def stage_uploads(files: List[str], developer: str) -> str:
+# Written beside the uploaded files to record what the operator said the
+# supply is. A dotfile so the pipeline, which selects documents by extension,
+# never mistakes it for something to read.
+CATEGORY_MARKER = ".supply-category"
+
+
+def stage_uploads(files: List[str], developer: str,
+                  supply_type: Optional[str] = None) -> str:
     """
     Put uploaded files where the pipeline expects them.
 
     The pipeline derives the landlord from the folder name, so an upload has to
-    land in a folder named after that landlord.
+    land in a folder named after that landlord. `supply_type` records what the
+    operator says this stock is; the pipeline can guess from the document, but
+    a person who has read the file knows better, and the guess is only a guess.
     """
     target = os.path.join(config.SUPPLY_DIR, developer.strip() or "Uploads")
     os.makedirs(target, exist_ok=True)
     for path in files:
         shutil.copy2(path, os.path.join(target, os.path.basename(path)))
+
+    category = categories.canonical_supply_type(supply_type)
+    if category:
+        with open(os.path.join(target, CATEGORY_MARKER), "w", encoding="utf-8") as fh:
+            fh.write(category)
     return target
+
+
+def declared_category(folder: str) -> Optional[str]:
+    """What the operator said this folder holds, if they said anything."""
+    if not folder:
+        return None
+    marker = os.path.join(config.SUPPLY_DIR, folder, CATEGORY_MARKER)
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            return categories.canonical_supply_type(fh.read().strip())
+    except OSError:
+        return None

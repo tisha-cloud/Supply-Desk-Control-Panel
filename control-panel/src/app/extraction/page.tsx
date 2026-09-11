@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { backend, BackendError } from "@/lib/backend";
 import { relativeTime } from "@/lib/format";
+import { SUPPLY_TYPES, supplyLabel } from "@/lib/supply";
 import { JobMonitor } from "@/components/JobMonitor";
 import {
   Callout,
@@ -30,6 +31,9 @@ export default function ExtractionPage() {
 
   const [files, setFiles] = useState<FileList | null>(null);
   const [landlord, setLandlord] = useState("");
+  // Declared at upload and written beside the files, so the run that reads
+  // them later knows what the operator said this stock is.
+  const [category, setCategory] = useState<string>("conventional");
   const [staged, setStaged] = useState<string | null>(null);
 
   const [advanced, setAdvanced] = useState(false);
@@ -83,6 +87,7 @@ export default function ExtractionPage() {
     try {
       const form = new FormData();
       form.append("developer", landlord.trim());
+      form.append("supply_type", category);
       Array.from(files).forEach((file) => form.append("files", file));
 
       const response = await fetch("/api/backend/api/extraction/upload", {
@@ -91,7 +96,10 @@ export default function ExtractionPage() {
       });
       if (!response.ok) throw new Error((await response.json()).detail ?? "Upload failed");
       const result = await response.json();
-      setStaged(`${result.staged} file(s) filed under “${result.developer}”.`);
+      setStaged(
+        `${result.staged} file(s) filed under “${result.developer}”` +
+          (result.supply_type ? ` as ${supplyLabel(result.supply_type)}.` : "."),
+      );
       setFiles(null);
       toast({ tone: "success", title: "Files added", message: result.developer });
       if (runAfter) await startRun(landlord.trim());
@@ -143,6 +151,26 @@ export default function ExtractionPage() {
             />
             <p className="mt-2 text-xs text-ink-3">
               Use the name as you want it stored. Existing landlords are matched automatically.
+            </p>
+
+            <label className="label mt-4" htmlFor="supply-category">
+              Category
+            </label>
+            <select
+              id="supply-category"
+              className="field"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {SUPPLY_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-ink-3">
+              What this stock is. The pipeline can guess it from the document, but your
+              choice wins — it only ever reads the category out of prose.
             </p>
           </div>
 

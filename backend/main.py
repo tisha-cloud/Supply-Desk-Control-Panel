@@ -144,9 +144,19 @@ def start_extraction(request: ExtractionRequest, background: BackgroundTasks):
 
 @app.post("/api/extraction/upload", dependencies=[Depends(require("intake.run"))])
 async def upload_source_files(developer: str = Form(...),
-                              files: List[UploadFile] = File(...)):
-    """Add landlord documents to the supply folder so the next run picks them up."""
-    from services import extraction_service
+                              files: List[UploadFile] = File(...),
+                              supply_type: str = Form("")):
+    """
+    Add landlord documents to the supply folder so the next run picks them up.
+
+    `supply_type` is what the operator says this stock is. The pipeline can
+    infer a category from the document, but that is read out of prose; somebody
+    who has opened the file knows, and what they declare wins.
+    """
+    from services import categories, extraction_service
+
+    if supply_type and not categories.canonical_supply_type(supply_type):
+        raise HTTPException(400, "Unknown supply_type: %s" % supply_type)
 
     staged = []
     temp_dir = os.path.join(config.UPLOAD_DIR, uuid.uuid4().hex)
@@ -157,11 +167,12 @@ async def upload_source_files(developer: str = Form(...),
             with open(path, "wb") as fh:
                 shutil.copyfileobj(upload.file, fh)
             staged.append(path)
-        target = extraction_service.stage_uploads(staged, developer)
+        target = extraction_service.stage_uploads(staged, developer, supply_type)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    return {"staged": len(staged), "developer": developer, "folder": target}
+    return {"staged": len(staged), "developer": developer, "folder": target,
+            "supply_type": categories.canonical_supply_type(supply_type)}
 
 
 # ============================================== managed office workbook import
