@@ -1,10 +1,14 @@
+import io
 import os
 import re
 import copy
+import urllib.request
 from datetime import datetime
 import pptx
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.util import Emu
 import lxml.etree as etree
 
 
@@ -129,36 +133,114 @@ class PPTGenerator:
             if os.path.exists(alt_path):
                 self.template_path = alt_path
 
-    def populate_summary_slide(self, slide9, matched_records):
-        """Populates Table 7 on Slide 9 (Location Map / Proposed Options List) with matched options."""
-        for shape in slide9.shapes:
+    @staticmethod
+    def _summary_table(slide):
+        """The options table on a summary slide, or None."""
+        for shape in slide.shapes:
             if shape.has_table:
-                tbl = shape.table
-                first_cell_text = tbl.rows[0].cells[0].text.strip().upper()
-                if first_cell_text.startswith("SL") or first_cell_text.startswith("SR") or first_cell_text.startswith("NO"):
-                    total_rows = len(tbl.rows) - 1  # data rows (typically 16)
-                    for idx in range(total_rows):
-                        row_cells = tbl.rows[idx + 1].cells
-                        if idx < len(matched_records):
-                            rec = matched_records[idx]
-                            prop_name = safe_str(rec.get('building_name', rec.get('property_name')), f'Option {idx+1}')
-                            loc_name = safe_str(rec.get('micromarket_category', rec.get('address_location')), 'Bangalore')
-                            
-                            set_cell_text(row_cells[0], str(idx + 1), font_size=Pt(8), bold=True)
-                            set_cell_text(row_cells[1], prop_name, font_size=Pt(8), bold=True)
-                            if len(row_cells) > 2:
-                                set_cell_text(row_cells[2], loc_name, font_size=Pt(8))
-                        else:
-                            set_cell_text(row_cells[0], "")
-                            set_cell_text(row_cells[1], "")
-                            if len(row_cells) > 2:
-                                set_cell_text(row_cells[2], "")
-                    break
+                header = shape.table.rows[0].cells[0].text.strip().upper()
+                if header.startswith(("SL", "SR", "NO")):
+                    return shape.table
+        return None
+
+    def summary_capacity(self, slide):
+        """
+        How many options one summary table holds, read from the template.
+
+        Hardcoding sixteen meant a change to the template silently truncated
+        the deck; reading it means the template stays the authority.
+        """
+        table = self._summary_table(slide)
+        return (len(table.rows) - 1) if table else 0
+
+    def populate_summary_slide(self, slide9, matched_records, start=1):
+        """
+        Fill one summary table. `start` is the option number of the first row,
+        so a deck whose options run past one table keeps numbering continuously
+        across the slides that carry them.
+        """
+        tbl = self._summary_table(slide9)
+        if tbl is None:
+            return
+        for idx in range(len(tbl.rows) - 1):
+            row_cells = tbl.rows[idx + 1].cells
+            if idx < len(matched_records):
+                rec = matched_records[idx]
+                prop_name = safe_str(rec.get('building_name', rec.get('property_name')),
+                                     f'Option {start + idx}')
+                loc_name = safe_str(rec.get('micromarket_category', rec.get('address_location')),
+                                    'Bangalore')
+                set_cell_text(row_cells[0], str(start + idx), font_size=Pt(8), bold=True)
+                set_cell_text(row_cells[1], prop_name, font_size=Pt(8), bold=True)
+                if len(row_cells) > 2:
+                    set_cell_text(row_cells[2], loc_name, font_size=Pt(8))
+            else:
+                # Unused rows are blanked, so a short final table does not show
+                # the placeholder text the template ships with.
+                set_cell_text(row_cells[0], "")
+                set_cell_text(row_cells[1], "")
+                if len(row_cells) > 2:
+                    set_cell_text(row_cells[2], "")
+
+    # The building photograph placeholder on the option template. It is the
+    # largest picture on the slide; the others are the logo and the footer rule.
+    PHOTO_MIN_WIDTH_IN = 3.0
+
+    @staticmethod
+    def _fetch(url, timeout=20):
+        """Read an image URL into memory, or None if it cannot be had."""
+        if not url or not str(url).lower().startswith(("http://", "https://")):
+            return None
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                if response.status != 200:
+                    return None
+                return response.read()
+        except Exception:
+            # A missing photograph is not a reason to fail a whole deck; the
+            # template placeholder simply stays where it is.
+            return None
+
+    def place_photo(self, slide, url):
+        """
+        Swap the template placeholder for this building photograph.
+
+        python-pptx cannot replace the image behind an existing picture shape,
+        so the placeholder is measured, deleted, and a new picture inserted at
+        the same position and size. Doing it by geometry rather than by shape
+        name survives a template where the shapes have been renamed.
+        """
+        data = self._fetch(url)
+        if not data:
+            return False
+
+        target = None
+        for shape in slide.shapes:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                if Emu(shape.width).inches >= self.PHOTO_MIN_WIDTH_IN:
+                    if target is None or shape.width > target.width:
+                        target = shape
+        if target is None:
+            return False
+
+        left, top, width, height = target.left, target.top, target.width, target.height
+        target._element.getparent().remove(target._element)
+        try:
+            slide.shapes.add_picture(io.BytesIO(data), left, top,
+                                     width=width, height=height)
+        except Exception:
+            return False
+        return True
 
     def populate_option_slide(self, slide, rec, opt_num):
         """Populates Slide 10 option template with detailed property information."""
         prop_name = safe_str(rec.get('building_name', rec.get('property_name')), f'Option {opt_num}')
         dev_name = safe_str(rec.get('developer_landlord', rec.get('developer_name')), 'Developer Group')
+
+        # The building photograph. Until now the record carried the URL and
+        # nothing ever read it, so every option slide shipped with the template
+        # stock image no matter what the database held.
+        self.place_photo(slide, rec.get('_image_url') or rec.get('building_perspective_photo'))
         loc_name = safe_str(rec.get('address_location', rec.get('micromarket_category')), 'Bangalore')
         mm_name = safe_str(rec.get('micromarket_category'), 'Bangalore')
         
@@ -309,9 +391,18 @@ class PPTGenerator:
            `slide.background._element` is the whole `<p:cSld>`, which *contains*
            the shape tree - replacing it swaps the freshly cloned shapes back for
            the template's, so every option slide ends up showing option 1.
-        2. Relationships must be carried across under their original rIds. The
-           copied `<a:blip r:embed="rId3">` still points at rId3, and if the new
-           slide part has no such relationship the picture resolves to nothing.
+        2. Relationships must be re-pointed. The copied `<a:blip r:embed="rId3">`
+           still names rId3, which means nothing in the new part. python-pptx
+           assigns rIds itself and offers no way to force one, so each carried
+           relationship is added, the id it comes back with is recorded, and the
+           copied XML is rewritten to match. The previous attempt passed the old
+           rId as a third positional argument to `_add_relationship`, where the
+           signature actually takes `is_external` - so every call failed, the
+           bare `except` swallowed it, and no image relationship was ever
+           carried. It went unnoticed because a slide whose photograph is
+           replaced loses the broken reference anyway; only the options with no
+           photograph of their own kept it, and those were the slides that
+           would not open.
         """
         layout = template_slide.slide_layout
         new_slide = prs.slides.add_slide(layout)
@@ -325,20 +416,30 @@ class PPTGenerator:
             if tag in ('sp', 'pic', 'graphicFrame', 'grpSp', 'cxnSp'):
                 new_slide.shapes._spTree.append(copy.deepcopy(shape_el))
 
-        # Carry image and media relationships over, keeping each rId identical so
-        # the copied r:embed references still resolve.
+        # Carry the relationships over and remember what each was renamed to.
+        remap = {}
         for rId, rel in template_slide.part.rels.items():
             if rel.reltype.endswith("slideLayout"):
                 continue  # add_slide already wired the layout
-            if rId in new_slide.part.rels:
-                continue
             try:
                 if rel.is_external:
-                    new_slide.part.rels._add_relationship(rel.reltype, rel.target_ref, rId, True)
+                    new_id = new_slide.part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
                 else:
-                    new_slide.part.rels._add_relationship(rel.reltype, rel.target_part, rId, False)
+                    new_id = new_slide.part.rels.get_or_add(rel.reltype, rel.target_part)
+                if new_id and new_id != rId:
+                    remap[rId] = new_id
             except Exception:
                 pass
+
+        # Re-point every reference in the copied shapes at its new id. Any
+        # attribute in the relationship namespace is rewritten, so pictures,
+        # media, hyperlinks and charts all survive the copy.
+        if remap:
+            r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            for el in new_slide.shapes._spTree.iter():
+                for attr, value in list(el.attrib.items()):
+                    if attr.startswith("{%s}" % r_ns) and value in remap:
+                        el.set(attr, remap[value])
 
         # Copy only the background element, never the containing cSld.
         try:
@@ -378,29 +479,59 @@ class PPTGenerator:
                 'quoted_rental_sqft_pm': '100'
             }]
 
-        num_options = min(len(matched_records), 16)  # Max 16 options fit on Slide 9 table
+        id_list = prs.slides._sldIdLst
+        snapshot = list(id_list)
+        intro_els = snapshot[:8]
+        closing_els = snapshot[10:13] if len(snapshot) > 12 else []
 
-        # Step 1: Populate Slide 9 (Summary Table)
+        def clone_of(source):
+            """Clone a slide and hand back both it and its id element."""
+            made = self._deep_clone_slide(prs, source)
+            return made, list(id_list)[-1]
+
+        # ---- summary: as many slides as the options need ---------------------
+        # Every option appears in the summary. One table holds a fixed number of
+        # rows, so the table is repeated rather than the list being cut to fit:
+        # capping it at one slide hid options that were in the deck anyway, a few
+        # slides further on.
         slide9 = prs.slides[8]
-        self.populate_summary_slide(slide9, matched_records[:num_options])
+        capacity = self.summary_capacity(slide9) or len(matched_records)
+        chunks = [matched_records[i:i + capacity]
+                  for i in range(0, len(matched_records), capacity)] or [[]]
 
-        # Step 2: Populate Slide 10 (Option 1 template)
+        # Clone every slide FIRST, from the untouched template, and only then
+        # fill them. Populating the template before cloning it corrupted the
+        # copies: swapping in a photograph deletes the placeholder picture and
+        # adds a new one under a fresh relationship id, and the clones carried
+        # the new XML while referencing a relationship that was never theirs -
+        # the saved deck then failed to open the image at all.
+        summary_slides, summary_els = [slide9], [snapshot[8]]
+        for _ in chunks[1:]:
+            made, el = clone_of(slide9)
+            summary_slides.append(made)
+            summary_els.append(el)
+        for n, (sl, chunk) in enumerate(zip(summary_slides, chunks)):
+            self.populate_summary_slide(sl, chunk, start=n * capacity + 1)
+
+        # ---- one detail slide per option, however many there are -------------
         slide10_template = prs.slides[9]
-        self.populate_option_slide(slide10_template, matched_records[0], 1)
+        option_slides, option_els = [slide10_template], [snapshot[9]]
+        for _ in range(2, len(matched_records) + 1):
+            made, el = clone_of(slide10_template)
+            option_slides.append(made)
+            option_els.append(el)
+        for idx, (sl, rec) in enumerate(zip(option_slides, matched_records), start=1):
+            self.populate_option_slide(sl, rec, idx)
 
-        # Store closing slide IDs (Slides 11, 12, 13 = indices 10, 11, 12)
-        sld_id_list = list(prs.slides._sldIdLst)
-        closing_sld_ids = sld_id_list[10:13] if len(sld_id_list) > 12 else []
-
-        # Clone Slide 10 for Options 2..N
-        for idx in range(2, num_options + 1):
-            new_slide = self._deep_clone_slide(prs, slide10_template)
-            self.populate_option_slide(new_slide, matched_records[idx - 1], idx)
-
-        # Step 3: Reorder closing slides (Why BangaloreOffice, Contact, Thank You) to the very end
-        for sld_id_el in closing_sld_ids:
-            prs.slides._sldIdLst.remove(sld_id_el)
-            prs.slides._sldIdLst.append(sld_id_el)
+        # ---- put the deck back in reading order ------------------------------
+        # Cloning appends, so summaries and options are interleaved at the end
+        # until they are reordered. Rebuilding the whole list is clearer than
+        # moving elements one at a time, and it keeps the closing slides last.
+        desired = intro_els + summary_els + option_els + closing_els
+        for el in list(id_list):
+            id_list.remove(el)
+        for el in desired:
+            id_list.append(el)
 
         prs.save(output_path)
         print(f"   -> Generated presentation deck at: {output_path}")

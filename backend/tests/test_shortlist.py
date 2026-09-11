@@ -123,6 +123,17 @@ class TestEveryMatchIsReturned:
         assert "Obeya Elan" not in names
         assert "Chanakya" not in names
 
+    def test_the_near_miss_floor_is_85_percent(self, krm):
+        """
+        The band is deliberately tight. At 150 seats it keeps a 134-seat
+        centre and drops anything under 128; a longer tail buried the options
+        that actually fit.
+        """
+        assert ds.NEAR_MISS_FLOOR == 0.85
+        names = [r["name"] for r in ds.shortlist(dict(CRITERIA))]
+        assert "Clayworks 5B" in names        # 134, inside the band
+        assert "Prestige Atlanta" in names    # 143, inside the band
+
 
 class TestFit:
     def test_meeting_and_falling_short_are_distinguished(self, krm):

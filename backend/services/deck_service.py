@@ -68,8 +68,10 @@ Return ONLY a JSON object with these keys (use null when the requirement does no
 MAX_OPTIONS = 200
 
 # How far below the requirement an option may fall and still be worth showing.
-# A 12-seat centre is not a near miss for a 150-seat brief, it is noise.
-NEAR_MISS_FLOOR = 0.7
+# At 0.85 a 150-seat brief still surfaces a 128-seat centre - close enough that
+# a client might take it - but not a 105-seat one. Set lower, the near-miss tail
+# grew long enough to bury the options that actually fit.
+NEAR_MISS_FLOOR = 0.85
 
 
 def requirement_size(criteria: Dict[str, Any]):
@@ -115,15 +117,64 @@ def parse_requirement(query: str) -> Dict[str, Any]:
         criteria = _fallback_parse(query)
 
     criteria.setdefault("title", "Office Space Options")
-    # A count is honoured only when the brief actually named one. Defaulting to
-    # six silently hid two thirds of the market: a search for 150 seats in
-    # Koramangala returned 6 of 25 available centres, and the ones it dropped
-    # included the best fits.
-    if criteria.get("limit"):
+    return _apply_seat_rule(reconcile(criteria, query))
+
+
+# A headcount, an area, and an explicit request for N options. These are read
+# from the requirement directly rather than taken from the model, because the
+# model is not reliable about them: asked the same question three times it
+# returned seats=150 twice and, once, no headcount at all plus an invented
+# limit of 6 - which is precisely the truncated, badly ranked shortlist this
+# was reported as.
+SEATS_RE = re.compile(
+    r"(\d[\d,]*)\s*(?:\w+\s+){0,2}?"
+    r"(?:seats?|desks?|pax|people|headcount|workstations?)", re.I)
+AREA_RE = re.compile(
+    r"(\d[\d,.]*)\s*(k\b)?\s*(?:sq\.?\s*ft|sft|sqft|square\s*feet)", re.I)
+COUNT_RE = re.compile(
+    r"(?:top|show|give|list|send)\s+(?:me\s+)?(\d+)\b"
+    r"|\b(\d+)\s+options?\b", re.I)
+
+
+def _number(text: str) -> Optional[float]:
+    try:
+        return float(str(text).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def reconcile(criteria: Dict[str, Any], query: str) -> Dict[str, Any]:
+    """
+    Let the requirement text override the model on anything countable.
+
+    The model is good at the parts that need judgement - which micro-market a
+    place name belongs to, what condition is being described, what the client
+    is really after. It is unreliable at copying a number out of a sentence,
+    and a dropped headcount silently disables fit ranking entirely.
+    """
+    text = query or ""
+
+    match = SEATS_RE.search(text)
+    if match:
+        value = _number(match.group(1))
+        if value:
+            criteria["seats"] = value
+
+    match = AREA_RE.search(text)
+    if match:
+        value = _number(match.group(1))
+        if value:
+            if match.group(2) and value < 1000:      # "30k sft"
+                value *= 1000
+            criteria["area_sqft"] = value
+
+    # A count is honoured only when the requirement asks for one in so many
+    # words. Left to itself the model supplies one on every request.
+    match = COUNT_RE.search(text)
+    criteria["limit"] = _number(match.group(1) or match.group(2)) if match else None
+    if criteria["limit"]:
         criteria["limit"] = max(1, min(int(criteria["limit"]), MAX_OPTIONS))
-    else:
-        criteria["limit"] = None
-    return _apply_seat_rule(criteria)
+    return criteria
 
 
 def _apply_seat_rule(criteria: Dict[str, Any]) -> Dict[str, Any]:
