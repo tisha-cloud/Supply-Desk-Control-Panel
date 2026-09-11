@@ -24,6 +24,7 @@ result precisely so a wrong one is visible and can be fixed.
 import csv
 import io
 import re
+import time
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -151,6 +152,179 @@ PINCODE_AREAS: Dict[str, Tuple[str, str]] = {
 PINCODE_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 
 
+# The mapping is cached briefly: one profiling run reads it once rather than
+# once per pincode, and an edit takes effect within the minute.
+_AREAS_TTL = 60.0
+_areas_cache: Dict[str, Any] = {"at": 0.0, "value": None}
+
+
+def load_areas(force: bool = False) -> Dict[str, Tuple[str, str]]:
+    """
+    The pincode mapping, from the database, falling back to the seed above.
+
+    PINCODE_AREAS is where this started and is now only a starting point. The
+    desk knows Bengaluru better than the code does, and a correction should not
+    need a deploy - so the table is copied into `pincode_areas` once and edited
+    there afterwards.
+    """
+    now = time.time()
+    if not force and _areas_cache["value"] is not None:
+        if now - _areas_cache["at"] < _AREAS_TTL:
+            return _areas_cache["value"]
+
+    areas = dict(PINCODE_AREAS)
+    try:
+        rows = db.client().table("pincode_areas").select(
+            "pincode, locality, micro_market").limit(5000).execute().data or []
+        if rows:
+            # The database wins outright where it has a pincode, so an edit is
+            # never quietly overridden by the seed it came from.
+            for row in rows:
+                areas[str(row["pincode"]).strip()] = (
+                    row.get("locality") or "", row["micro_market"])
+    except Exception:
+        # No table yet, or no database: the seed alone still answers.
+        pass
+
+    _areas_cache.update({"at": now, "value": areas})
+    return areas
+
+
+def forget_areas() -> None:
+    """Drop the cache, so an import shows up immediately."""
+    _areas_cache.update({"at": 0.0, "value": None})
+
+
+def seed_areas() -> int:
+    """
+    Copy the built-in table into the database, once, if it is empty.
+
+    Only ever into an empty table: re-seeding would undo corrections, and the
+    whole point of moving the mapping into the database was that corrections
+    stick.
+    """
+    sb = db.client()
+    try:
+        if sb.table("pincode_areas").select("pincode").limit(1).execute().data:
+            return 0
+    except Exception:
+        return 0     # the table does not exist yet; migration 0007 not run
+
+    known = {r["code"] for r in
+             (sb.table("micro_markets").select("code").execute().data or [])}
+    rows = [{"pincode": pincode, "locality": locality,
+             "micro_market": code, "source": "seed"}
+            for pincode, (locality, code) in PINCODE_AREAS.items()
+            if code in known]
+    if rows:
+        sb.table("pincode_areas").insert(rows).execute()
+    forget_areas()
+    return len(rows)
+
+
+def import_areas(rows: List[Dict[str, str]]) -> Dict[str, Any]:
+    """
+    Bulk-load a pincode list, replacing any entry it names.
+
+    Returns what it wrote and, more usefully, what it refused: a row naming a
+    micro-market the database does not have would produce a recommendation
+    pointing nowhere, so it is rejected and reported rather than stored.
+    """
+    sb = db.client()
+    known = {r["code"] for r in
+             (sb.table("micro_markets").select("code").execute().data or [])}
+
+    payload, rejected = [], []
+    seen = set()
+    for row in rows:
+        pincode = re.sub(r"\D", "", str(row.get("pincode") or ""))
+        market = str(row.get("micro_market") or "").strip()
+        locality = str(row.get("locality") or "").strip()
+        if len(pincode) != 6:
+            rejected.append({"row": row, "why": "not a six-digit pincode"})
+            continue
+        if market not in known:
+            rejected.append({"row": row,
+                             "why": "no micro-market called %r" % market})
+            continue
+        if pincode in seen:
+            continue     # last one in the file would win anyway; keep the first
+        seen.add(pincode)
+        payload.append({"pincode": pincode, "locality": locality or market,
+                        "micro_market": market, "source": "import"})
+
+    if payload:
+        sb.table("pincode_areas").upsert(payload, on_conflict="pincode").execute()
+    forget_areas()
+    return {"imported": len(payload), "rejected": rejected,
+            "micro_markets": sorted(known)}
+
+
+# Header names the upload reader will accept for each column, so a file does
+# not have to be reshaped before it can be loaded.
+COLUMN_ALIASES = {
+    "pincode": ("pincode", "pin code", "pin", "postal code", "zip", "zipcode"),
+    "locality": ("locality", "area", "location", "place", "neighbourhood",
+                 "neighborhood", "post office"),
+    "micro_market": ("micro_market", "micro market", "micromarket", "market",
+                     "micro-market", "blr categorization", "categorization",
+                     "category"),
+}
+
+
+def read_area_upload(data: bytes, filename: str = "") -> List[Dict[str, str]]:
+    """
+    Read a pincode mapping file, working out which column is which.
+
+    Accepts whatever shape the list arrives in - the headers only have to be
+    recognisable, not exact - because asking for a specific layout just moves
+    the work onto whoever has the data.
+    """
+    table: List[List[str]] = []
+    name = (filename or "").lower()
+
+    if name.endswith((".xlsx", ".xlsm", ".xls")):
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for row in wb.worksheets[0].iter_rows(values_only=True):
+                table.append(["" if c is None else str(c).strip() for c in row])
+        except Exception:
+            return []
+    else:
+        text = data.decode("utf-8", "replace")
+        table = [[c.strip() for c in row] for row in csv.reader(io.StringIO(text))]
+
+    table = [r for r in table if any(c for c in r)]
+    if not table:
+        return []
+
+    header = [c.lower().strip() for c in table[0]]
+    index: Dict[str, int] = {}
+    for field, aliases in COLUMN_ALIASES.items():
+        for position, cell in enumerate(header):
+            if cell in aliases:
+                index[field] = position
+                break
+
+    # No recognisable header: assume the conventional order instead of giving
+    # up, since a bare two- or three-column list is the common case.
+    body = table[1:] if index else table
+    if not index:
+        index = {"pincode": 0, "locality": 1, "micro_market": 2}
+
+    rows = []
+    for raw in body:
+        def cell(field: str) -> str:
+            position = index.get(field)
+            return raw[position] if position is not None and position < len(raw) else ""
+        if cell("pincode"):
+            rows.append({"pincode": cell("pincode"),
+                         "locality": cell("locality"),
+                         "micro_market": cell("micro_market")})
+    return rows
+
+
 def extract_pincodes(text: str) -> List[str]:
     """
     Every six-digit pincode in a blob of text, in the order they appear.
@@ -219,13 +393,14 @@ def profile(pincodes: List[str]) -> Dict[str, Any]:
     """
     counts = Counter(p.strip() for p in pincodes if p and p.strip())
     total = sum(counts.values())
+    areas = load_areas()
 
     stock = available_markets()
     markets: Dict[str, Dict[str, Any]] = {}
     unknown: List[Dict[str, Any]] = []
 
     for pincode, employees in counts.items():
-        entry = PINCODE_AREAS.get(pincode)
+        entry = areas.get(pincode)
         if not entry:
             unknown.append({"pincode": pincode, "employees": employees})
             continue

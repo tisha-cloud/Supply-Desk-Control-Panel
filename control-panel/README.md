@@ -39,6 +39,7 @@ supabase/migrations/0003_space_operator.sql   -- operator per suite, not per tow
 supabase/migrations/0004_anon_access.sql      -- browser access before login exists
 supabase/migrations/0005_three_categories.sql -- fold co-working into managed
 supabase/migrations/0006_auth_and_roles.sql   -- sign-in, roles, permissions
+supabase/migrations/0007_pincode_areas.sql    -- pincode to micro-market mapping
 ```
 
 `0006` replaces the open `anon` access from `0004`. Until you run it the app has no
@@ -152,6 +153,40 @@ Three layers, and only the first two are security:
 The tool refuses to leave itself unadministrable: the last administrator cannot be deleted,
 deactivated or demoted, a built-in role cannot be edited, and a role still held by someone
 cannot be deleted.
+
+---
+
+## Demography profiling
+
+The Proposal Builder takes a list of employee pincodes and ranks the micro-markets by how
+many of them live nearest, then drops the winner into the requirement — so the location is
+argued from commutes rather than from whatever the desk happens to be holding.
+
+Ranked by headcount, not by average distance: the geographic midpoint between two clusters
+is convenient to neither of them. A market with no stock is still listed, because it is a
+real fact about the workforce, but it is never the recommendation — where people live only
+matters if they can be housed there.
+
+Nothing is dropped quietly. Any six-digit number counts as a candidate pincode, so an
+employee in Mumbai is reported as living outside the city rather than vanishing from the
+total and shifting the majority unseen.
+
+### The pincode mapping
+
+`pincode_areas` maps a pincode to a micro-market, with the locality name it is known by.
+That name is shown beside every classification, so a wrong one is visible on screen rather
+than buried in a total.
+
+It ships seeded with about 90 Bengaluru pincodes, copied out of `services/demography.py`
+on first run. **Replace it with your own list**: Demography profiling → *Load pincode
+mapping*, and upload a spreadsheet or CSV. The headers only have to be recognisable —
+`pincode` / `pin` / `postal code`, `locality` / `area` / `location`, `micro_market` /
+`market` / `category` — and a bare three-column list with no header is read in order.
+
+An upload replaces any pincode it names and leaves the rest alone. A row naming a
+micro-market that does not exist is refused and reported rather than stored, because it
+would produce a recommendation pointing nowhere. Re-seeding never happens after the first
+run, so corrections stick.
 
 ---
 

@@ -491,6 +491,46 @@ async def profile_demography_upload(file: UploadFile = File(...)):
     return demography.profile(pincodes)
 
 
+@app.get("/api/demography/pincodes",
+         dependencies=[Depends(require("proposals.write"))])
+def list_pincode_areas():
+    """The mapping behind the recommendation, so it can be checked."""
+    from services import demography
+
+    areas = demography.load_areas()
+    by_market: Dict[str, List[Dict[str, str]]] = {}
+    for pincode, (locality, market) in sorted(areas.items()):
+        by_market.setdefault(market, []).append(
+            {"pincode": pincode, "locality": locality})
+    return {"count": len(areas),
+            "markets": [{"micro_market": m, "pincodes": v}
+                        for m, v in sorted(by_market.items())]}
+
+
+@app.post("/api/demography/pincodes/import",
+          dependencies=[Depends(require("supply.write"))])
+async def import_pincode_areas(file: UploadFile = File(...)):
+    """
+    Load a pincode mapping in bulk, replacing any entry it names.
+
+    Editing this changes where clients are told to sit, which is why it needs
+    the supply-write permission rather than a proposal one.
+    """
+    from services import demography
+
+    rows = demography.read_area_upload(await file.read(), file.filename or "")
+    if not rows:
+        raise HTTPException(
+            422,
+            "No pincode rows found in %s. A spreadsheet or CSV with a pincode "
+            "column, an area column and a micro-market column is enough; the "
+            "headers only have to be recognisable." % (file.filename or "that file"))
+    try:
+        return demography.import_areas(rows)
+    except Exception as exc:
+        raise HTTPException(500, "Could not import the mapping: %s" % exc)
+
+
 # ================================================================ user access
 import routes_access  # noqa: E402  (imported late: it depends on `auth` and `db`)
 
@@ -518,6 +558,24 @@ def bootstrap_first_admin():
         print("Password: %s" % config.SEED_ADMIN_PASSWORD)
         print("Change it from User Access as soon as you have signed in.")
         print("=" * 68)
+
+
+@app.on_event("startup")
+def bootstrap_pincode_areas():
+    """
+    Copy the built-in pincode mapping into the database on first run.
+
+    Only into an empty table. Re-seeding would undo corrections, and moving the
+    mapping out of the code was precisely so corrections stick.
+    """
+    try:
+        from services import demography
+        seeded = demography.seed_areas()
+    except Exception as exc:
+        print("Could not seed the pincode areas: %s" % exc)
+        return
+    if seeded:
+        print("Seeded %d pincode areas for demography profiling." % seeded)
 
 
 if __name__ == "__main__":

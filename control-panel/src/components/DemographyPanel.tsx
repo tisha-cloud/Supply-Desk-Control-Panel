@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { MapPin, Upload, Users, X } from "lucide-react";
+import { MapPin, Table2, Upload, Users, X } from "lucide-react";
 import { backend, BackendError } from "@/lib/backend";
 import { Callout, Section, useToast } from "@/components/ui";
+import { Can } from "@/lib/access";
 import type { DemographyProfile } from "@/lib/types";
 
 /**
@@ -25,6 +26,7 @@ export function DemographyPanel({
 }) {
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
+  const mappingInput = useRef<HTMLInputElement>(null);
 
   const [text, setText] = useState("");
   const [profile, setProfile] = useState<DemographyProfile | null>(null);
@@ -67,6 +69,36 @@ export function DemographyPanel({
     } finally {
       setBusy(false);
       if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function importMapping(file: File) {
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/backend/api/demography/pincodes/import", {
+        method: "POST",
+        body: form,
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Import failed");
+      toast({
+        tone: body.rejected?.length ? "warning" : "success",
+        title: `${body.imported} pincode${body.imported === 1 ? "" : "s"} loaded`,
+        message: body.rejected?.length
+          ? `${body.rejected.length} row(s) refused: ${body.rejected[0].why}. The micro-market must be one of ${(body.micro_markets ?? []).join(", ")}.`
+          : "The mapping is updated.",
+      });
+    } catch (err) {
+      toast({
+        tone: "danger",
+        title: "Could not load the mapping",
+        message: err instanceof BackendError ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+      if (mappingInput.current) mappingInput.current.value = "";
     }
   }
 
@@ -123,6 +155,28 @@ export function DemographyPanel({
             }}
           />
           <p className="text-center text-xs text-ink-3">.xlsx · .csv · .txt</p>
+
+          <Can permission="supply.write">
+            <button
+              className="btn-ghost btn-sm justify-center text-xs"
+              onClick={() => mappingInput.current?.click()}
+              disabled={busy}
+              title="Load your own pincode to micro-market list"
+            >
+              <Table2 className="h-3.5 w-3.5" aria-hidden />
+              Load pincode mapping
+            </button>
+            <input
+              ref={mappingInput}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importMapping(file);
+              }}
+            />
+          </Can>
         </div>
       </div>
 
