@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { backend, BackendError } from "@/lib/backend";
+import { DemographyPanel } from "@/components/DemographyPanel";
 import { indianNumber } from "@/lib/format";
 import { MANAGED_SEAT_THRESHOLD, supplyLabel, supplyTone } from "@/lib/supply";
 import {
@@ -168,6 +169,19 @@ export default function DecksPage() {
           </Callout>
         </div>
       ) : null}
+
+      <DemographyPanel
+        onUseMarket={(market) => {
+          // Append rather than replace: the headcount and condition the
+          // operator has already typed are the other half of the brief.
+          setQuery((prev) =>
+            prev.toLowerCase().includes(market.toLowerCase())
+              ? prev
+              : `${prev.trim()}${prev.trim() ? " in " : ""}${market}`.trim(),
+          );
+          document.getElementById("requirement")?.focus();
+        }}
+      />
 
       <Section>
         <label className="label" htmlFor="requirement">

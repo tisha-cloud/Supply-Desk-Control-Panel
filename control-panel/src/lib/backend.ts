@@ -7,7 +7,13 @@
  * negotiation in the browser.
  */
 import type { AccessUser, Me, Permission, Role } from "./access";
-import type { DeckFormat, DeckPreview, DuplicateGroup, IngestJob } from "./types";
+import type {
+  DeckFormat,
+  DeckPreview,
+  DemographyProfile,
+  DuplicateGroup,
+  IngestJob,
+} from "./types";
 
 export const BACKEND_URL =
   process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000";
@@ -144,6 +150,12 @@ export const backend = {
 
   deleteUser: (id: string) =>
     request<{ deleted: string }>(`/api/access/users/${id}`, { method: "DELETE" }),
+
+  profileDemography: (body: { text?: string; pincodes?: string[] }) =>
+    request<DemographyProfile>("/api/demography/profile", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   previewDeck: (body: { query: string }) =>
     request<DeckPreview>("/api/decks/preview", {

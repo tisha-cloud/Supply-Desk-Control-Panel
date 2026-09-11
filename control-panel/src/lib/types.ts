@@ -218,3 +218,26 @@ export interface DuplicateGroup {
   /** How many building references the merge would move. */
   moves: number;
 }
+
+/* ------------------------------------------------------------ demography */
+
+/** One micro-market, and how much of the workforce lives beside it. */
+export interface DemographyMarket {
+  micro_market: string;
+  employees: number;
+  share: number;
+  /** How many buildings the desk has there. A market with none cannot house them. */
+  buildings: number;
+  areas: { pincode: string; locality: string; employees: number }[];
+}
+
+export interface DemographyProfile {
+  total_employees: number;
+  matched_employees: number;
+  unrecognised_employees: number;
+  unrecognised: { pincode: string; employees: number }[];
+  markets: DemographyMarket[];
+  /** The market most of them live nearest that actually has stock. */
+  recommended: string | null;
+  recommended_share: number;
+}

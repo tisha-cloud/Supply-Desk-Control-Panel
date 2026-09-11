@@ -446,6 +446,51 @@ def list_templates():
                   if f.lower().endswith((".pptx", ".potx")))
 
 
+# ================================================================= demography
+class DemographyRequest(BaseModel):
+    # Either a pasted blob - a column out of a spreadsheet, a comma-separated
+    # line - or an already-split list. Both read the same.
+    text: Optional[str] = None
+    pincodes: Optional[List[str]] = None
+
+
+@app.post("/api/demography/profile",
+          dependencies=[Depends(require("proposals.write"))])
+def profile_demography(request: DemographyRequest):
+    """
+    Rank micro-markets by where a workforce lives.
+
+    Given employee pincodes, this says which of the markets the desk trades
+    most of them live nearest - so a location is argued from commutes rather
+    than from whichever market the agent happens to hold stock in.
+    """
+    from services import demography
+
+    pincodes = list(request.pincodes or [])
+    if request.text:
+        pincodes += demography.extract_pincodes(request.text)
+    if not pincodes:
+        raise HTTPException(422, "No Karnataka pincodes found in that input.")
+    return demography.profile(pincodes)
+
+
+@app.post("/api/demography/upload",
+          dependencies=[Depends(require("proposals.write"))])
+async def profile_demography_upload(file: UploadFile = File(...)):
+    """The same, from an uploaded employee list: .xlsx, .csv or plain text."""
+    from services import demography
+
+    data = await file.read()
+    pincodes = demography.read_upload(data, file.filename or "")
+    if not pincodes:
+        raise HTTPException(
+            422,
+            "No Karnataka pincodes found in %s. The file can be a spreadsheet, "
+            "a CSV or plain text; any column of 6-digit pincodes is read."
+            % (file.filename or "that file"))
+    return demography.profile(pincodes)
+
+
 # ================================================================ user access
 import routes_access  # noqa: E402  (imported late: it depends on `auth` and `db`)
 
